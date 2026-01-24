@@ -1,0 +1,86 @@
+name: quick_church
+description: A production-level Flutter app for church prayer management.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.2.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State Management
+  flutter_bloc: ^8.1.3
+
+  # Dependency Injection
+  get_it: ^7.6.4
+  injectable: ^2.3.2
+
+  # Local Storage
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+
+  # Utilities
+  equatable: ^2.0.5
+  uuid: ^4.2.1
+  intl: ^0.18.1
+  shimmer: ^3.0.0
+
+  # Sharing
+  share_plus: ^7.2.2
+
+  # Typography
+  google_fonts: ^6.1.0
+
+  # Modern Icons
+  lucide_icons: ^0.257.0
+
+  # Secure Storage for PIN
+  shared_preferences: ^2.2.2
+
+  # Calendar for Faithfulness Tracking
+  table_calendar: ^3.0.9
+
+  # Haptic Feedback (built-in flutter/services.dart)
+
+  # Splash Screen
+  flutter_native_splash: ^2.3.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.1
+
+  # Code Generation
+  build_runner: ^2.4.7
+  injectable_generator: ^2.4.1
+  hive_generator: ^2.0.1
+
+  # App Icons
+  flutter_launcher_icons: ^0.13.1
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/icon/
+
+# App Launcher Icons Configuration
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/app_icon.png"
+  min_sdk_android: 21
+  adaptive_icon_background: "#673AB7"
+  adaptive_icon_foreground: "assets/icon/app_icon.png"
+
+# Native Splash Screen Configuration
+flutter_native_splash:
+  color: "#673AB7"
+  android: true
+  ios: true
+  image: assets/icon/app_icon.png
+  android_12:
+    color: "#673AB7"
+    icon_background_color: "#673AB7"
+    image: assets/icon/app_icon.png
