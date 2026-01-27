@@ -6,6 +6,7 @@ import 'package:quick_church/core/theme/app_theme.dart';
 import 'package:quick_church/features/prayer/domain/entities/prayer.dart';
 import 'package:quick_church/features/prayer/presentation/bloc/prayer_cubit.dart';
 import 'package:quick_church/features/prayer/presentation/bloc/prayer_state.dart';
+import 'package:quick_church/features/prayer/presentation/pages/pulpit_mode_page.dart';
 import 'package:quick_church/features/prayer/presentation/widgets/add_prayer_bottom_sheet.dart';
 import 'package:quick_church/features/prayer/presentation/widgets/prayer_detail_sheet.dart';
 
@@ -93,11 +94,24 @@ class _PrayersPageState extends State<PrayersPage> with SingleTickerProviderStat
                     });
                   },
                 ),
-                if (!_isSearching)
+                if (!_isSearching) ...[
                   IconButton(
-                    icon: Icon(LucideIcons.slidersHorizontal),
+                    icon: const Icon(LucideIcons.presentation),
+                    tooltip: 'Pulpit Mode',
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const PulpitModePage(),
+                        ),
+                      );
+                    },
+                  ),
+                  IconButton(
+                    icon: const Icon(LucideIcons.slidersHorizontal),
                     onPressed: () => _showFilterDialog(context),
                   ),
+                ],
               ],
               bottom: PreferredSize(
                 preferredSize: const Size.fromHeight(100),
@@ -275,7 +289,7 @@ class _PrayersPageState extends State<PrayersPage> with SingleTickerProviderStat
             const SizedBox(height: 24),
             FilledButton.icon(
               onPressed: () => AddPrayerBottomSheet.show(context),
-              icon: Icon(LucideIcons.plus),
+              icon: const Icon(LucideIcons.plus),
               label: const Text('Add Prayer'),
             ),
           ],
@@ -311,7 +325,7 @@ class _PrayersPageState extends State<PrayersPage> with SingleTickerProviderStat
     showModalBottomSheet(
       context: context,
       backgroundColor: isDark ? AppTheme.darkSurface : AppTheme.cardBackground,
-      shape: RoundedRectangleBorder(
+      shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(AppTheme.cardRadius)),
       ),
       builder: (context) => Padding(
@@ -476,7 +490,7 @@ class _PrayerListItemState extends State<_PrayerListItem> {
           color: AppTheme.urgentColor,
           borderRadius: BorderRadius.circular(AppTheme.cardRadius),
         ),
-        child: Icon(LucideIcons.trash2, color: Colors.white),
+        child: const Icon(LucideIcons.trash2, color: Colors.white),
       ),
       child: GestureDetector(
         onTap: widget.onTap,
@@ -564,7 +578,7 @@ class _PrayerListItemState extends State<_PrayerListItem> {
                                   ),
                                 ),
                               if (widget.prayer.isLocked)
-                                Icon(
+                                const Icon(
                                   LucideIcons.lock,
                                   size: 14,
                                   color: AppTheme.primaryColor,

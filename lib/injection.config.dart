@@ -15,6 +15,15 @@ import 'package:injectable/injectable.dart' as _i526;
 import 'package:uuid/uuid.dart' as _i706;
 
 import 'core/di/register_module.dart' as _i854;
+import 'core/services/interfaces/i_auth_service.dart' as _i812;
+import 'core/services/interfaces/i_backup_service.dart' as _i336;
+import 'core/services/interfaces/i_connectivity_service.dart' as _i577;
+import 'core/services/interfaces/i_notification_service.dart' as _i615;
+import 'core/services/mock/mock_auth_service.dart' as _i7;
+import 'core/services/mock/mock_backup_service.dart' as _i511;
+import 'core/services/mock/mock_connectivity_service.dart' as _i679;
+import 'core/services/mock/mock_notification_service.dart' as _i974;
+import 'features/auth/presentation/bloc/auth_cubit.dart' as _i538;
 import 'features/prayer/data/datasources/prayer_local_data_source.dart'
     as _i610;
 import 'features/prayer/data/models/prayer_model.dart' as _i36;
@@ -50,12 +59,18 @@ extension GetItInjectableX on _i174.GetIt {
     );
     gh.lazySingleton<_i610.PrayerLocalDataSource>(() =>
         _i610.PrayerLocalDataSourceImpl(gh<_i979.Box<_i36.PrayerModel>>()));
+    gh.lazySingleton<_i615.INotificationService>(
+        () => _i974.MockNotificationService());
     gh.factory<_i541.SessionCubit>(() => _i541.SessionCubit(
           gh<_i979.Box<_i739.PrayerSessionModel>>(),
           gh<_i706.Uuid>(),
         ));
+    gh.lazySingleton<_i577.IConnectivityService>(
+        () => _i679.MockConnectivityService());
+    gh.lazySingleton<_i812.IAuthService>(() => _i7.MockAuthService());
     gh.lazySingleton<_i348.IPrayerRepository>(
         () => _i358.PrayerRepositoryImpl(gh<_i610.PrayerLocalDataSource>()));
+    gh.lazySingleton<_i336.IBackupService>(() => _i511.MockBackupService());
     gh.lazySingleton<_i584.DeletePrayer>(
         () => _i584.DeletePrayer(gh<_i348.IPrayerRepository>()));
     gh.lazySingleton<_i460.GetPrayers>(
@@ -64,6 +79,8 @@ extension GetItInjectableX on _i174.GetIt {
           gh<_i348.IPrayerRepository>(),
           gh<_i706.Uuid>(),
         ));
+    gh.factory<_i538.AuthCubit>(
+        () => _i538.AuthCubit(gh<_i812.IAuthService>()));
     gh.factory<_i1045.PrayerCubit>(() => _i1045.PrayerCubit(
           gh<_i460.GetPrayers>(),
           gh<_i540.AddPrayer>(),

@@ -549,7 +549,7 @@ class _AnsweredPrayerCard extends StatelessWidget {
                 label: const Text('Add Testimony'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppTheme.answeredColor,
-                  side: BorderSide(color: AppTheme.answeredColor),
+                  side: const BorderSide(color: AppTheme.answeredColor),
                 ),
               ),
             ),

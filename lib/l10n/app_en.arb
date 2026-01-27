@@ -1,0 +1,453 @@
+{
+  "@@locale": "en",
+
+  "appTitle": "Kneel",
+  "@appTitle": {
+    "description": "The application title"
+  },
+
+  "home": "Home",
+  "@home": {
+    "description": "Home tab label"
+  },
+
+  "prayers": "Prayers",
+  "@prayers": {
+    "description": "Prayers tab label"
+  },
+
+  "community": "Community",
+  "@community": {
+    "description": "Community tab label"
+  },
+
+  "insights": "Insights",
+  "@insights": {
+    "description": "Insights tab label"
+  },
+
+  "profile": "Profile",
+  "@profile": {
+    "description": "Profile tab label"
+  },
+
+  "welcomeTitle": "Your Personal Prayer Companion",
+  "@welcomeTitle": {
+    "description": "Welcome screen title"
+  },
+
+  "welcomeSubtitle": "Track your prayers, build spiritual habits,\nand grow in faith together.",
+  "@welcomeSubtitle": {
+    "description": "Welcome screen subtitle"
+  },
+
+  "continueWithGoogle": "Continue with Google",
+  "@continueWithGoogle": {
+    "description": "Google sign in button text"
+  },
+
+  "continueWithApple": "Continue with Apple",
+  "@continueWithApple": {
+    "description": "Apple sign in button text"
+  },
+
+  "loginWithBiometrics": "Login with Biometrics",
+  "@loginWithBiometrics": {
+    "description": "Biometric login button text"
+  },
+
+  "termsText": "By continuing, you agree to our Terms of Service\nand Privacy Policy",
+  "@termsText": {
+    "description": "Terms and privacy policy text"
+  },
+
+  "signingIn": "Signing in...",
+  "@signingIn": {
+    "description": "Loading text during sign in"
+  },
+
+  "prayerStreak": "Prayer Streak",
+  "@prayerStreak": {
+    "description": "Prayer streak card title"
+  },
+
+  "keepHabitGoing": "Keep your prayer habit going",
+  "@keepHabitGoing": {
+    "description": "Prayer streak card subtitle"
+  },
+
+  "dayStreak": "Day Streak",
+  "@dayStreak": {
+    "description": "Day streak label"
+  },
+
+  "timesPrayed": "Times Prayed",
+  "@timesPrayed": {
+    "description": "Times prayed label"
+  },
+
+  "answered": "Answered",
+  "@answered": {
+    "description": "Answered prayers label"
+  },
+
+  "active": "Active",
+  "@active": {
+    "description": "Active prayers label"
+  },
+
+  "urgent": "Urgent",
+  "@urgent": {
+    "description": "Urgent prayers label"
+  },
+
+  "guidedSessions": "Guided Sessions",
+  "@guidedSessions": {
+    "description": "Guided sessions section title"
+  },
+
+  "recentPrayers": "Recent Prayers",
+  "@recentPrayers": {
+    "description": "Recent prayers section title"
+  },
+
+  "seeAll": "See all",
+  "@seeAll": {
+    "description": "See all button text"
+  },
+
+  "noPrayersYet": "No prayers yet",
+  "@noPrayersYet": {
+    "description": "Empty state title"
+  },
+
+  "addFirstPrayer": "Add your first prayer request",
+  "@addFirstPrayer": {
+    "description": "Empty state subtitle"
+  },
+
+  "newPrayer": "New Prayer",
+  "@newPrayer": {
+    "description": "New prayer button text"
+  },
+
+  "quickPray": "Quick Pray",
+  "@quickPray": {
+    "description": "Quick pray button text"
+  },
+
+  "focus": "Focus",
+  "@focus": {
+    "description": "Focus page title"
+  },
+
+  "sacredTimer": "Sacred Timer",
+  "@sacredTimer": {
+    "description": "Sacred timer card title"
+  },
+
+  "howLongToPray": "How long would you like to dwell in prayer?",
+  "@howLongToPray": {
+    "description": "Duration selection prompt"
+  },
+
+  "selectDuration": "Select Duration",
+  "@selectDuration": {
+    "description": "Duration selection label"
+  },
+
+  "beginPrayerTime": "Begin Prayer Time",
+  "@beginPrayerTime": {
+    "description": "Start focus session button"
+  },
+
+  "prayerQueue": "Prayer Queue",
+  "@prayerQueue": {
+    "description": "Prayer queue section title"
+  },
+
+  "noActivePrayers": "No Active Prayers",
+  "@noActivePrayers": {
+    "description": "Empty focus state title"
+  },
+
+  "addPrayersToFocus": "Add prayers to enter focus mode",
+  "@addPrayersToFocus": {
+    "description": "Empty focus state subtitle"
+  },
+
+  "prayed": "Prayed",
+  "@prayed": {
+    "description": "Prayed action button"
+  },
+
+  "sessionComplete": "Session Complete",
+  "@sessionComplete": {
+    "description": "Session complete title"
+  },
+
+  "keepGoing": "Keep Going",
+  "@keepGoing": {
+    "description": "Keep going button"
+  },
+
+  "finish": "Finish",
+  "@finish": {
+    "description": "Finish button"
+  },
+
+  "endPrayerTime": "End Prayer Time?",
+  "@endPrayerTime": {
+    "description": "Exit confirmation title"
+  },
+
+  "continueButton": "Continue",
+  "@continueButton": {
+    "description": "Continue button"
+  },
+
+  "saveAndExit": "Save & Exit",
+  "@saveAndExit": {
+    "description": "Save and exit button"
+  },
+
+  "exit": "Exit",
+  "@exit": {
+    "description": "Exit button"
+  },
+
+  "settings": "Settings",
+  "@settings": {
+    "description": "Settings page title"
+  },
+
+  "notifications": "Notifications",
+  "@notifications": {
+    "description": "Notifications setting"
+  },
+
+  "reminderSettings": "Reminder settings",
+  "@reminderSettings": {
+    "description": "Reminder settings subtitle"
+  },
+
+  "biometricLock": "Biometric Lock",
+  "@biometricLock": {
+    "description": "Biometric lock setting"
+  },
+
+  "secureWithBiometric": "Secure with fingerprint/face",
+  "@secureWithBiometric": {
+    "description": "Biometric lock subtitle"
+  },
+
+  "language": "Language",
+  "@language": {
+    "description": "Language setting"
+  },
+
+  "theme": "Theme",
+  "@theme": {
+    "description": "Theme setting"
+  },
+
+  "backupAndExport": "Backup & Export",
+  "@backupAndExport": {
+    "description": "Backup setting"
+  },
+
+  "exportYourData": "Export your prayer data",
+  "@exportYourData": {
+    "description": "Backup subtitle"
+  },
+
+  "helpAndFaq": "Help & FAQ",
+  "@helpAndFaq": {
+    "description": "Help setting"
+  },
+
+  "getSupport": "Get support",
+  "@getSupport": {
+    "description": "Help subtitle"
+  },
+
+  "privacyPolicy": "Privacy Policy",
+  "@privacyPolicy": {
+    "description": "Privacy policy setting"
+  },
+
+  "aboutKneel": "About Kneel",
+  "@aboutKneel": {
+    "description": "About setting"
+  },
+
+  "signOut": "Sign Out",
+  "@signOut": {
+    "description": "Sign out button"
+  },
+
+  "signOutConfirm": "Are you sure you want to sign out?",
+  "@signOutConfirm": {
+    "description": "Sign out confirmation"
+  },
+
+  "cancel": "Cancel",
+  "@cancel": {
+    "description": "Cancel button"
+  },
+
+  "morningReminders": "Morning Reminders",
+  "@morningReminders": {
+    "description": "Morning reminders setting"
+  },
+
+  "dailyPrayerReminder": "Daily prayer reminder",
+  "@dailyPrayerReminder": {
+    "description": "Morning reminders subtitle"
+  },
+
+  "reminderTime": "Reminder Time",
+  "@reminderTime": {
+    "description": "Reminder time setting"
+  },
+
+  "answeredPrayerAlerts": "Answered Prayer Alerts",
+  "@answeredPrayerAlerts": {
+    "description": "Answered alerts setting"
+  },
+
+  "celebrateAnswered": "Celebrate answered prayers",
+  "@celebrateAnswered": {
+    "description": "Answered alerts subtitle"
+  },
+
+  "exportAsCsv": "Export as CSV",
+  "@exportAsCsv": {
+    "description": "CSV export option"
+  },
+
+  "exportAsJson": "Export as JSON",
+  "@exportAsJson": {
+    "description": "JSON export option"
+  },
+
+  "importFromJson": "Import from JSON",
+  "@importFromJson": {
+    "description": "JSON import option"
+  },
+
+  "exportSuccess": "Export Successful!",
+  "@exportSuccess": {
+    "description": "Export success message"
+  },
+
+  "myGroups": "My Groups",
+  "@myGroups": {
+    "description": "My groups section"
+  },
+
+  "create": "Create",
+  "@create": {
+    "description": "Create button"
+  },
+
+  "sharedIntentions": "Shared Intentions",
+  "@sharedIntentions": {
+    "description": "Shared intentions section"
+  },
+
+  "praying": "praying",
+  "@praying": {
+    "description": "Praying count suffix"
+  },
+
+  "pray": "Pray",
+  "@pray": {
+    "description": "Pray button"
+  },
+
+  "comingSoon": "Coming Soon",
+  "@comingSoon": {
+    "description": "Coming soon badge"
+  },
+
+  "total": "Total",
+  "@total": {
+    "description": "Total stat label"
+  },
+
+  "streak": "Streak",
+  "@streak": {
+    "description": "Streak stat label"
+  },
+
+  "activityHeatmap": "Activity Heatmap",
+  "@activityHeatmap": {
+    "description": "Heatmap section title"
+  },
+
+  "thisMonth": "This Month",
+  "@thisMonth": {
+    "description": "Month calendar section"
+  },
+
+  "weeklyTrend": "Weekly Trend",
+  "@weeklyTrend": {
+    "description": "Weekly trend section"
+  },
+
+  "less": "Less",
+  "@less": {
+    "description": "Heatmap legend less"
+  },
+
+  "more": "More",
+  "@more": {
+    "description": "Heatmap legend more"
+  },
+
+  "scriptureMeditation": "Scripture Meditation",
+  "@scriptureMeditation": {
+    "description": "Session type"
+  },
+
+  "guidedPrayer": "Guided Prayer",
+  "@guidedPrayer": {
+    "description": "Session type"
+  },
+
+  "worshipSession": "Worship Session",
+  "@worshipSession": {
+    "description": "Session type"
+  },
+
+  "breathingExercise": "Breathing Exercise",
+  "@breathingExercise": {
+    "description": "Session type"
+  },
+
+  "minutes": "{count} minutes",
+  "@minutes": {
+    "description": "Duration in minutes",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+
+  "min": "min",
+  "@min": {
+    "description": "Minutes abbreviation"
+  },
+
+  "beginSession": "Begin Session",
+  "@beginSession": {
+    "description": "Begin session button"
+  },
+
+  "unlockPremium": "Unlock Premium",
+  "@unlockPremium": {
+    "description": "Premium unlock button"
+  }
+}

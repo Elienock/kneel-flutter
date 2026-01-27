@@ -64,6 +64,8 @@ class PinDialog extends StatefulWidget {
     // Check if PIN is set
     final isPinSet = await PinManager.isPinSet();
 
+    if (!context.mounted) return false;
+
     if (!isPinSet) {
       // Show setup dialog first
       final setupResult = await _showSetupDialog(context);
@@ -483,7 +485,7 @@ class _PinSetupDialogState extends State<_PinSetupDialog> {
                 color: AppTheme.primaryColor.withAlpha(26),
                 shape: BoxShape.circle,
               ),
-              child: Icon(
+              child: const Icon(
                 LucideIcons.keyRound,
                 size: 32,
                 color: AppTheme.primaryColor,

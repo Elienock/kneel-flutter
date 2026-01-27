@@ -96,7 +96,6 @@ class _CalendarPageState extends State<CalendarPage> {
 
   Widget _buildStreakHeader(BuildContext context, SessionState state) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
 
     int currentStreak = 0;
     int bestStreak = 0;
@@ -293,7 +292,7 @@ class _CalendarPageState extends State<CalendarPage> {
             color: isDark ? Colors.white : AppTheme.primaryColor,
             fontWeight: FontWeight.bold,
           ),
-          selectedDecoration: BoxDecoration(
+          selectedDecoration: const BoxDecoration(
             color: AppTheme.primaryColor,
             shape: BoxShape.circle,
           ),
@@ -309,7 +308,7 @@ class _CalendarPageState extends State<CalendarPage> {
             color: AppTheme.primaryColor.withAlpha(26),
             borderRadius: BorderRadius.circular(12),
           ),
-          formatButtonTextStyle: TextStyle(
+          formatButtonTextStyle: const TextStyle(
             color: AppTheme.primaryColor,
             fontWeight: FontWeight.w600,
           ),
@@ -408,7 +407,7 @@ class _CalendarPageState extends State<CalendarPage> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        _LegendItem(
+        const _LegendItem(
           color: AppTheme.primaryColor,
           label: '10+ min',
         ),
@@ -528,7 +527,7 @@ class _CalendarPageState extends State<CalendarPage> {
                   ),
                   child: Row(
                     children: [
-                      Icon(
+                      const Icon(
                         LucideIcons.sunrise,
                         color: AppTheme.primaryColor,
                         size: 20,
@@ -561,7 +560,7 @@ class _CalendarPageState extends State<CalendarPage> {
                     ),
                     const SizedBox(width: 8),
                     if (hasDeepSession)
-                      _DetailChip(
+                      const _DetailChip(
                         icon: LucideIcons.sparkles,
                         label: 'Deep Session',
                         isHighlighted: true,

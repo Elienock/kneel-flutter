@@ -69,7 +69,7 @@ class _PrayerDetailSheetState extends State<PrayerDetailSheet> {
     return Container(
       decoration: BoxDecoration(
         color: isDark ? AppTheme.darkSurface : AppTheme.cardBackground,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppTheme.cardRadius)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(AppTheme.cardRadius)),
       ),
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
@@ -96,7 +96,7 @@ class _PrayerDetailSheetState extends State<PrayerDetailSheet> {
               children: [
                 // Share button
                 IconButton(
-                  icon: Icon(LucideIcons.share2),
+                  icon: const Icon(LucideIcons.share2),
                   tooltip: 'Share',
                   onPressed: () => _sharePrayer(context),
                 ),
@@ -110,7 +110,7 @@ class _PrayerDetailSheetState extends State<PrayerDetailSheet> {
                 ),
                 // Edit button
                 IconButton(
-                  icon: Icon(LucideIcons.pencil),
+                  icon: const Icon(LucideIcons.pencil),
                   tooltip: 'Edit',
                   onPressed: () {
                     Navigator.pop(context);
@@ -126,19 +126,19 @@ class _PrayerDetailSheetState extends State<PrayerDetailSheet> {
               runSpacing: 8,
               children: [
                 if (isAnswered)
-                  _StatusBadge(
+                  const _StatusBadge(
                     label: 'ANSWERED',
                     color: AppTheme.answeredColor,
                     icon: LucideIcons.sparkles,
                   ),
                 if (widget.prayer.priority == PrayerPriority.urgent)
-                  _StatusBadge(
+                  const _StatusBadge(
                     label: 'URGENT',
                     color: AppTheme.urgentColor,
                     icon: LucideIcons.alertTriangle,
                   ),
                 if (widget.prayer.isLocked)
-                  _StatusBadge(
+                  const _StatusBadge(
                     label: 'LOCKED',
                     color: AppTheme.primaryColor,
                     icon: LucideIcons.lock,
@@ -256,7 +256,7 @@ class _PrayerDetailSheetState extends State<PrayerDetailSheet> {
                   children: [
                     Row(
                       children: [
-                        Icon(
+                        const Icon(
                           LucideIcons.sparkles,
                           size: 18,
                           color: AppTheme.answeredColor,
@@ -297,7 +297,7 @@ class _PrayerDetailSheetState extends State<PrayerDetailSheet> {
                         const SnackBar(content: Text('Amen. Your prayer has been recorded.')),
                       );
                     },
-                    icon: Icon(LucideIcons.checkCircle),
+                    icon: const Icon(LucideIcons.checkCircle),
                     label: const Text('Pray'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppTheme.secondaryColor,
@@ -314,7 +314,7 @@ class _PrayerDetailSheetState extends State<PrayerDetailSheet> {
                             context.read<PrayerCubit>().markAsActive(widget.prayer.id);
                             Navigator.pop(context);
                           },
-                          icon: Icon(LucideIcons.refreshCw),
+                          icon: const Icon(LucideIcons.refreshCw),
                           label: const Text('Reactivate'),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: AppTheme.mediumColor,
@@ -327,7 +327,7 @@ class _PrayerDetailSheetState extends State<PrayerDetailSheet> {
                             context.read<PrayerCubit>().markAsAnswered(widget.prayer.id);
                             Navigator.pop(context);
                           },
-                          icon: Icon(LucideIcons.sparkles),
+                          icon: const Icon(LucideIcons.sparkles),
                           label: const Text('Answered'),
                           style: FilledButton.styleFrom(
                             backgroundColor: AppTheme.answeredColor,
@@ -345,7 +345,7 @@ class _PrayerDetailSheetState extends State<PrayerDetailSheet> {
                   context.read<PrayerCubit>().deletePrayer(widget.prayer.id);
                   Navigator.pop(context);
                 },
-                icon: Icon(LucideIcons.trash2),
+                icon: const Icon(LucideIcons.trash2),
                 label: const Text('Delete Prayer'),
                 style: TextButton.styleFrom(
                   foregroundColor: AppTheme.urgentColor,

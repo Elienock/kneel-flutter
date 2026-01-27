@@ -10,8 +10,21 @@ dependencies:
   flutter:
     sdk: flutter
 
+  # Localization
+  flutter_localizations:
+    sdk: flutter
+
   # State Management
   flutter_bloc: ^8.1.3
+
+  # Animations
+  flutter_animate: ^4.3.0
+
+  # Biometric Authentication
+  local_auth: ^2.1.6
+
+  # Connectivity
+  connectivity_plus: ^5.0.1
 
   # Dependency Injection
   get_it: ^7.6.4
@@ -24,7 +37,7 @@ dependencies:
   # Utilities
   equatable: ^2.0.5
   uuid: ^4.2.1
-  intl: ^0.18.1
+  intl: ^0.20.2
   shimmer: ^3.0.0
 
   # Sharing
@@ -62,6 +75,7 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  generate: true
   assets:
     - assets/icon/
 

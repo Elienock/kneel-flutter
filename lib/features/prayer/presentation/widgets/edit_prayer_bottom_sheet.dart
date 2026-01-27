@@ -86,7 +86,7 @@ class _EditPrayerBottomSheetState extends State<EditPrayerBottomSheet> {
     return Container(
       decoration: BoxDecoration(
         color: isDark ? AppTheme.darkSurface : AppTheme.cardBackground,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppTheme.cardRadius)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(AppTheme.cardRadius)),
       ),
       child: Padding(
         padding: EdgeInsets.only(bottom: bottomPadding),
@@ -150,7 +150,7 @@ class _EditPrayerBottomSheetState extends State<EditPrayerBottomSheet> {
                   // Title field
                   TextFormField(
                     controller: _titleController,
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       labelText: 'Prayer Title',
                       prefixIcon: Icon(LucideIcons.type),
                     ),
@@ -223,7 +223,7 @@ class _EditPrayerBottomSheetState extends State<EditPrayerBottomSheet> {
                   // Description field
                   TextFormField(
                     controller: _descriptionController,
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       labelText: 'Description',
                       prefixIcon: Icon(LucideIcons.alignLeft),
                       alignLabelWithHint: true,
@@ -242,7 +242,7 @@ class _EditPrayerBottomSheetState extends State<EditPrayerBottomSheet> {
                   // Scripture reference field
                   TextFormField(
                     controller: _scriptureController,
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       labelText: 'Scripture Reference (optional)',
                       hintText: 'e.g., Philippians 4:6',
                       prefixIcon: Icon(LucideIcons.bookOpen),
@@ -255,7 +255,7 @@ class _EditPrayerBottomSheetState extends State<EditPrayerBottomSheet> {
                   if (isAnswered) ...[
                     TextFormField(
                       controller: _testimonyController,
-                      decoration: InputDecoration(
+                      decoration: const InputDecoration(
                         labelText: 'Testimony (optional)',
                         hintText: 'How did God answer this prayer?',
                         prefixIcon: Icon(LucideIcons.sparkles),
@@ -270,7 +270,7 @@ class _EditPrayerBottomSheetState extends State<EditPrayerBottomSheet> {
                   // Requester name field
                   TextFormField(
                     controller: _requesterController,
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       labelText: 'Requester Name (optional)',
                       prefixIcon: Icon(LucideIcons.user),
                     ),
@@ -301,7 +301,7 @@ class _EditPrayerBottomSheetState extends State<EditPrayerBottomSheet> {
                               color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
                             ),
                           )
-                        : Icon(LucideIcons.checkCircle),
+                        : const Icon(LucideIcons.checkCircle),
                     label: Text(_isSaving ? 'Saving...' : 'Save Changes'),
                     style: FilledButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),

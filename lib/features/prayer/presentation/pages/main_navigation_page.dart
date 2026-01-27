@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:quick_church/core/theme/app_theme.dart';
-import 'package:quick_church/features/prayer/presentation/pages/calendar_page.dart';
-import 'package:quick_church/features/prayer/presentation/pages/faithfulness_page.dart';
+import 'package:quick_church/features/community/presentation/pages/community_page.dart';
+import 'package:quick_church/features/insights/presentation/pages/insights_page.dart';
 import 'package:quick_church/features/prayer/presentation/pages/focus_page.dart';
 import 'package:quick_church/features/prayer/presentation/pages/home_page.dart';
 import 'package:quick_church/features/prayer/presentation/pages/prayers_page.dart';
 import 'package:quick_church/features/prayer/presentation/widgets/add_prayer_bottom_sheet.dart';
+import 'package:quick_church/features/profile/presentation/pages/profile_page.dart';
 
 /// Main navigation shell with YouVersion-style bottom navigation.
 class MainNavigationPage extends StatefulWidget {
@@ -24,6 +25,7 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
   final PageStorageBucket _bucket = PageStorageBucket();
 
   // Navigation items with Lucide icons (modern outline look)
+  // New tabs: Home, Prayers, Community, Insights, Profile
   static const List<_NavItem> _navItems = [
     _NavItem(
       icon: LucideIcons.home,
@@ -36,19 +38,19 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
       label: 'Prayers',
     ),
     _NavItem(
-      icon: LucideIcons.calendar,
-      selectedIcon: LucideIcons.calendar,
-      label: 'Calendar',
+      icon: LucideIcons.users,
+      selectedIcon: LucideIcons.users,
+      label: 'Community',
     ),
     _NavItem(
-      icon: LucideIcons.crosshair,
-      selectedIcon: LucideIcons.crosshair,
-      label: 'Focus',
+      icon: LucideIcons.barChart2,
+      selectedIcon: LucideIcons.barChart2,
+      label: 'Insights',
     ),
     _NavItem(
-      icon: LucideIcons.sparkles,
-      selectedIcon: LucideIcons.sparkles,
-      label: 'Testimonies',
+      icon: LucideIcons.user,
+      selectedIcon: LucideIcons.user,
+      label: 'Profile',
     ),
   ];
 
@@ -77,21 +79,47 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
               onNavigateToPrayers: () => setState(() => _currentIndex = 1),
             ),
             const PrayersPage(key: PageStorageKey('prayers')),
-            const CalendarPage(key: PageStorageKey('calendar')),
-            const FocusPage(key: PageStorageKey('focus')),
-            const FaithfulnessPage(key: PageStorageKey('testimonies')),
+            const CommunityPage(key: PageStorageKey('community')),
+            const InsightsPage(key: PageStorageKey('insights')),
+            const ProfilePage(key: PageStorageKey('profile')),
           ],
         ),
       ),
       bottomNavigationBar: _buildBottomNav(context),
-      floatingActionButton: _currentIndex == 1
-          ? FloatingActionButton.extended(
-              onPressed: () => AddPrayerBottomSheet.show(context),
-              icon: Icon(LucideIcons.plus),
-              label: const Text('New Prayer'),
-            )
-          : null,
+      floatingActionButton: _buildFAB(context),
     );
+  }
+
+  Widget? _buildFAB(BuildContext context) {
+    // Quick Pray FAB on Home tab
+    if (_currentIndex == 0) {
+      return FloatingActionButton.extended(
+        heroTag: 'quick_pray',
+        onPressed: () {
+          // Navigate to Focus page with 1-minute quick session
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const FocusPage(quickPrayMode: true),
+            ),
+          );
+        },
+        icon: const Icon(LucideIcons.crosshair),
+        label: const Text('Quick Pray'),
+      );
+    }
+
+    // Add Prayer FAB on Prayers tab
+    if (_currentIndex == 1) {
+      return FloatingActionButton.extended(
+        heroTag: 'add_prayer',
+        onPressed: () => AddPrayerBottomSheet.show(context),
+        icon: const Icon(LucideIcons.plus),
+        label: const Text('New Prayer'),
+      );
+    }
+
+    return null;
   }
 
   Widget _buildBottomNav(BuildContext context) {
@@ -164,7 +192,7 @@ class _NavItemWidget extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
 
     final selectedColor = isDark ? Colors.white : const Color(0xFF1C1C1E);
-    final unselectedColor = const Color(0xFF8E8E93);
+    const unselectedColor = Color(0xFF8E8E93);
 
     return GestureDetector(
       onTap: onTap,

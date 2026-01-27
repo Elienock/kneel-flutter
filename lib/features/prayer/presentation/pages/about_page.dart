@@ -268,7 +268,7 @@ class AboutPage extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(
+                const Icon(
                   LucideIcons.rocket,
                   color: AppTheme.primaryColor,
                 ),
@@ -355,23 +355,23 @@ class AboutPage extends StatelessWidget {
       child: Column(
         children: [
           ListTile(
-            leading: Icon(LucideIcons.fileText),
+            leading: const Icon(LucideIcons.fileText),
             title: Text('Licenses', style: GoogleFonts.inter()),
-            trailing: Icon(LucideIcons.chevronRight, size: 20),
+            trailing: const Icon(LucideIcons.chevronRight, size: 20),
             onTap: () => _showLicenses(context),
           ),
           Divider(height: 1, color: isDark ? const Color(0xFF38383A) : const Color(0xFFE5E5EA)),
           ListTile(
-            leading: Icon(LucideIcons.shield),
+            leading: const Icon(LucideIcons.shield),
             title: Text('Privacy Policy', style: GoogleFonts.inter()),
-            trailing: Icon(LucideIcons.chevronRight, size: 20),
+            trailing: const Icon(LucideIcons.chevronRight, size: 20),
             onTap: () => _showPrivacyPolicy(context),
           ),
           Divider(height: 1, color: isDark ? const Color(0xFF38383A) : const Color(0xFFE5E5EA)),
           ListTile(
-            leading: Icon(LucideIcons.scroll),
+            leading: const Icon(LucideIcons.scroll),
             title: Text('Terms of Service', style: GoogleFonts.inter()),
-            trailing: Icon(LucideIcons.chevronRight, size: 20),
+            trailing: const Icon(LucideIcons.chevronRight, size: 20),
             onTap: () => _showTerms(context),
           ),
         ],

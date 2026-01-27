@@ -149,7 +149,7 @@ class _AddPrayerDialogState extends State<AddPrayerDialog> {
 
                   // Priority dropdown
                   DropdownButtonFormField<PrayerPriority>(
-                    value: _priority,
+                    initialValue: _priority,
                     decoration: const InputDecoration(
                       labelText: 'Priority',
                       prefixIcon: Icon(Icons.flag_outlined),

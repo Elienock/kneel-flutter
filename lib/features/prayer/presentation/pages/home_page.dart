@@ -3,6 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:quick_church/core/theme/app_theme.dart';
+import 'package:quick_church/features/guided/data/mock_guided_content.dart';
+import 'package:quick_church/features/guided/presentation/pages/guided_sessions_page.dart';
+import 'package:quick_church/features/guided/presentation/widgets/guided_session_card.dart';
 import 'package:quick_church/features/prayer/domain/entities/prayer.dart';
 import 'package:quick_church/features/prayer/presentation/bloc/prayer_cubit.dart';
 import 'package:quick_church/features/prayer/presentation/bloc/prayer_state.dart';
@@ -40,7 +43,7 @@ class HomePage extends StatelessWidget {
                   ),
                   actions: [
                     IconButton(
-                      icon: Icon(LucideIcons.settings),
+                      icon: const Icon(LucideIcons.settings),
                       onPressed: () => Navigator.push(
                         context,
                         MaterialPageRoute(builder: (_) => const AboutPage()),
@@ -64,6 +67,10 @@ class HomePage extends StatelessWidget {
 
                       // Quick Actions
                       _QuickActionsRow(prayers: prayers),
+                      const SizedBox(height: 24),
+
+                      // Guided Sessions Section
+                      _GuidedSessionsSection(),
                       const SizedBox(height: 24),
 
                       // Recent Prayers Section
@@ -165,12 +172,12 @@ class _StreakSummaryCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Color(0xFFFFA500).withAlpha(26),
+                  color: const Color(0xFFFFA500).withAlpha(26),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(
+                child: const Icon(
                   LucideIcons.flame,
-                  color: const Color(0xFFFFA500),
+                  color: Color(0xFFFFA500),
                   size: 24,
                 ),
               ),
@@ -200,7 +207,7 @@ class _StreakSummaryCard extends StatelessWidget {
                   value: streak.toString(),
                   label: 'Day Streak',
                   icon: LucideIcons.flame,
-                  color: Color(0xFFFFA500),
+                  color: const Color(0xFFFFA500),
                 ),
               ),
               const SizedBox(width: 16),
@@ -366,6 +373,71 @@ class _QuickActionCard extends StatelessWidget {
   }
 }
 
+/// Guided sessions horizontal scrolling section.
+class _GuidedSessionsSection extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final sessions = MockGuidedContent.getFeatured();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Guided Sessions',
+              style: theme.textTheme.titleLarge,
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const GuidedSessionsPage(),
+                  ),
+                );
+              },
+              child: const Text(
+                'See all',
+                style: TextStyle(
+                  color: AppTheme.primaryColor,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 180,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: sessions.length,
+            itemBuilder: (context, index) {
+              return Padding(
+                padding: EdgeInsets.only(right: index < sessions.length - 1 ? 12 : 0),
+                child: GuidedSessionCard(
+                  session: sessions[index],
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const GuidedSessionsPage(),
+                      ),
+                    );
+                  },
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 /// Recent prayers section.
 class _RecentPrayersSection extends StatelessWidget {
   final List<Prayer> prayers;
@@ -401,7 +473,7 @@ class _RecentPrayersSection extends StatelessWidget {
             if (recentPrayers.isNotEmpty)
               TextButton(
                 onPressed: onSeeAll,
-                child: Text(
+                child: const Text(
                   'See all',
                   style: TextStyle(
                     color: AppTheme.primaryColor,
@@ -553,7 +625,7 @@ class _RecentPrayerCardState extends State<_RecentPrayerCard> {
                         ),
                       ),
                       if (widget.prayer.isLocked)
-                        Icon(LucideIcons.lock, size: 16, color: Color(0xFF673AB7)),
+                        const Icon(LucideIcons.lock, size: 16, color: Color(0xFF673AB7)),
                     ],
                   ),
                   const SizedBox(height: 4),

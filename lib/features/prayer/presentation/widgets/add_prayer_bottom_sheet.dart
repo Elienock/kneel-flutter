@@ -63,7 +63,7 @@ class _AddPrayerBottomSheetState extends State<AddPrayerBottomSheet> {
       child: Container(
         decoration: BoxDecoration(
           color: colorScheme.surface,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(AppTheme.cardRadius)),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(AppTheme.cardRadius)),
         ),
         child: Padding(
           padding: EdgeInsets.only(bottom: bottomPadding),
@@ -98,7 +98,7 @@ class _AddPrayerBottomSheetState extends State<AddPrayerBottomSheet> {
                             color: AppTheme.primaryColor.withAlpha(26),
                             borderRadius: BorderRadius.circular(14),
                           ),
-                          child: Icon(
+                          child: const Icon(
                             LucideIcons.plusCircle,
                             color: AppTheme.primaryColor,
                             size: 24,
@@ -131,7 +131,7 @@ class _AddPrayerBottomSheetState extends State<AddPrayerBottomSheet> {
                     // Title field
                     TextFormField(
                       controller: _titleController,
-                      decoration: InputDecoration(
+                      decoration: const InputDecoration(
                         labelText: 'Prayer Title',
                         hintText: 'e.g., Family Health, Job Interview',
                         prefixIcon: Icon(LucideIcons.type),
@@ -271,7 +271,7 @@ class _AddPrayerBottomSheetState extends State<AddPrayerBottomSheet> {
                     // Description field
                     TextFormField(
                       controller: _descriptionController,
-                      decoration: InputDecoration(
+                      decoration: const InputDecoration(
                         labelText: 'Description',
                         hintText: 'Share more details about your prayer...',
                         prefixIcon: Icon(LucideIcons.alignLeft),
@@ -346,7 +346,7 @@ class _AddPrayerBottomSheetState extends State<AddPrayerBottomSheet> {
                                 color: colorScheme.onPrimary,
                               ),
                             )
-                          : Icon(LucideIcons.checkCircle),
+                          : const Icon(LucideIcons.checkCircle),
                       label: Text(_isSubmitting ? 'Adding Prayer...' : 'Add to Prayer Wall'),
                       style: FilledButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -13,7 +12,10 @@ import 'package:quick_church/features/prayer/presentation/bloc/session_cubit.dar
 
 /// Focus tab - distraction-free prayer mode with Sacred Timer.
 class FocusPage extends StatefulWidget {
-  const FocusPage({super.key});
+  /// If true, starts immediately with 1-minute quick pray session.
+  final bool quickPrayMode;
+
+  const FocusPage({super.key, this.quickPrayMode = false});
 
   @override
   State<FocusPage> createState() => _FocusPageState();
@@ -26,6 +28,13 @@ class _FocusPageState extends State<FocusPage> {
   int _selectedDuration = 5; // Default 5 minutes
   int _prayersPrayed = 0;
   DateTime? _sessionStartTime;
+  bool _quickPrayInitialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Quick pray mode will be initiated after first build when prayers are loaded
+  }
 
   @override
   void dispose() {
@@ -66,6 +75,14 @@ class _FocusPageState extends State<FocusPage> {
         final prayers = state is PrayerLoaded ? state.prayers : <Prayer>[];
         final activePrayers =
             prayers.where((p) => p.status == PrayerStatus.active).toList();
+
+        // Auto-start quick pray mode (1 minute) if requested
+        if (widget.quickPrayMode && !_quickPrayInitialized && activePrayers.isNotEmpty) {
+          _quickPrayInitialized = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _startFocusMode(1); // 1 minute for quick pray
+          });
+        }
 
         if (_isInFocusMode) {
           return _FocusModeView(
@@ -393,7 +410,7 @@ class _PrayerQueueItem extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (isFirst)
-                  Text(
+                  const Text(
                     'UP NEXT',
                     style: TextStyle(
                       fontSize: 10,
@@ -418,7 +435,7 @@ class _PrayerQueueItem extends StatelessWidget {
                 color: AppTheme.primaryColor.withAlpha(26),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Icon(
+              child: const Icon(
                 LucideIcons.play,
                 color: AppTheme.primaryColor,
                 size: 20,
@@ -970,13 +987,13 @@ class _FocusPrayerCard extends StatelessWidget {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             if (isPaused)
-                              Icon(
+                              const Icon(
                                 LucideIcons.pause,
                                 color: AppTheme.primaryColor,
                                 size: 24,
                               )
                             else if (isFinished)
-                              Icon(
+                              const Icon(
                                 LucideIcons.check,
                                 color: AppTheme.answeredColor,
                                 size: 32,
@@ -1020,7 +1037,7 @@ class _FocusPrayerCard extends StatelessWidget {
                   color: AppTheme.urgentColor.withAlpha(26),
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: Row(
+                child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
@@ -1028,7 +1045,7 @@ class _FocusPrayerCard extends StatelessWidget {
                       size: 16,
                       color: AppTheme.urgentColor,
                     ),
-                    const SizedBox(width: 4),
+                    SizedBox(width: 4),
                     Text(
                       'URGENT',
                       style: TextStyle(
