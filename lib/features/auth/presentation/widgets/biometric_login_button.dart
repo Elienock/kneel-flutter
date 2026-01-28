@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import 'package:quick_church/core/l10n/app_strings.dart';
 
 /// A styled biometric login button.
 class BiometricLoginButton extends StatelessWidget {
@@ -49,8 +51,8 @@ class BiometricLoginButton extends StatelessWidget {
                   ),
                   const SizedBox(width: 12),
                   Text(
-                    'Login with Biometrics',
-                    style: TextStyle(
+                    AppStrings.loginWithBiometrics,
+                    style: GoogleFonts.inter(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
                       color: Theme.of(context).colorScheme.onSurface,

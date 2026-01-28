@@ -46,9 +46,14 @@
     "description": "Google sign in button text"
   },
 
-  "continueWithApple": "Continue with Apple",
-  "@continueWithApple": {
-    "description": "Apple sign in button text"
+  "usePhoneNumber": "Use Phone Number",
+  "@usePhoneNumber": {
+    "description": "Phone sign in button text"
+  },
+
+  "emailLogin": "Email Login",
+  "@emailLogin": {
+    "description": "Email sign in button text"
   },
 
   "loginWithBiometrics": "Login with Biometrics",

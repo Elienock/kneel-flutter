@@ -3,6 +3,7 @@ import 'package:injectable/injectable.dart';
 import 'package:uuid/uuid.dart';
 import 'package:quick_church/features/prayer/data/models/prayer_model.dart';
 import 'package:quick_church/features/prayer/data/models/prayer_session_model.dart';
+import 'package:quick_church/features/sermon/data/models/sermon_note_model.dart';
 
 /// Module for registering third-party dependencies that cannot be annotated directly.
 @module
@@ -22,4 +23,11 @@ abstract class RegisterModule {
   @preResolve
   @lazySingleton
   Future<Box<PrayerSessionModel>> get sessionBox => Hive.openBox<PrayerSessionModel>('prayer_sessions');
+
+  /// Provides the Hive box for storing SermonNoteModel instances.
+  /// Used for the Sermon Vault feature.
+  @preResolve
+  @lazySingleton
+  @Named('sermonBox')
+  Future<Box<SermonNoteModel>> get sermonBox => Hive.openBox<SermonNoteModel>('sermon_notes');
 }

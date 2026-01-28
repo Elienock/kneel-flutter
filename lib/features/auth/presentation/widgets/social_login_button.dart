@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import 'package:quick_church/core/l10n/app_strings.dart';
 
 /// A styled social login button for OAuth providers.
 class SocialLoginButton extends StatelessWidget {
@@ -10,6 +12,7 @@ class SocialLoginButton extends StatelessWidget {
   final Color textColor;
   final Color iconColor;
   final bool isLoading;
+  final bool outlined;
 
   const SocialLoginButton({
     super.key,
@@ -20,6 +23,7 @@ class SocialLoginButton extends StatelessWidget {
     required this.textColor,
     required this.iconColor,
     this.isLoading = false,
+    this.outlined = false,
   });
 
   /// Creates a Google sign-in button.
@@ -28,7 +32,7 @@ class SocialLoginButton extends StatelessWidget {
     bool isLoading = false,
   }) {
     return SocialLoginButton(
-      label: 'Continue with Google',
+      label: AppStrings.continueWithGoogle,
       icon: LucideIcons.chrome,
       onPressed: onPressed,
       backgroundColor: const Color(0xFF7C3AED),
@@ -38,16 +42,32 @@ class SocialLoginButton extends StatelessWidget {
     );
   }
 
-  /// Creates an Apple sign-in button.
-  factory SocialLoginButton.apple({
+  /// Creates a Phone sign-in button.
+  factory SocialLoginButton.phone({
     required VoidCallback onPressed,
     bool isLoading = false,
   }) {
     return SocialLoginButton(
-      label: 'Continue with Apple',
-      icon: LucideIcons.apple,
+      label: AppStrings.continueWithPhone,
+      icon: LucideIcons.smartphone,
       onPressed: onPressed,
-      backgroundColor: const Color(0xFF1A1A1A),
+      backgroundColor: const Color(0xFF059669),
+      textColor: Colors.white,
+      iconColor: Colors.white,
+      isLoading: isLoading,
+    );
+  }
+
+  /// Creates an Email sign-in button.
+  factory SocialLoginButton.email({
+    required VoidCallback onPressed,
+    bool isLoading = false,
+  }) {
+    return SocialLoginButton(
+      label: AppStrings.emailLogin,
+      icon: LucideIcons.mail,
+      onPressed: onPressed,
+      backgroundColor: const Color(0xFF475569),
       textColor: Colors.white,
       iconColor: Colors.white,
       isLoading: isLoading,
@@ -56,6 +76,23 @@ class SocialLoginButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (outlined) {
+      return SizedBox(
+        width: double.infinity,
+        height: 56,
+        child: OutlinedButton(
+          onPressed: isLoading ? null : onPressed,
+          style: OutlinedButton.styleFrom(
+            side: BorderSide(color: backgroundColor, width: 2),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+          ),
+          child: _buildContent(backgroundColor),
+        ),
+      );
+    }
+
     return SizedBox(
       width: double.infinity,
       height: 56,
@@ -69,31 +106,37 @@ class SocialLoginButton extends StatelessWidget {
             borderRadius: BorderRadius.circular(16),
           ),
         ),
-        child: isLoading
-            ? SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(textColor),
-                ),
-              )
-            : Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(icon, color: iconColor, size: 22),
-                  const SizedBox(width: 12),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: textColor,
-                    ),
-                  ),
-                ],
-              ),
+        child: _buildContent(textColor),
       ),
+    );
+  }
+
+  Widget _buildContent(Color contentColor) {
+    if (isLoading) {
+      return SizedBox(
+        width: 24,
+        height: 24,
+        child: CircularProgressIndicator(
+          strokeWidth: 2,
+          valueColor: AlwaysStoppedAnimation<Color>(contentColor),
+        ),
+      );
+    }
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(icon, color: iconColor, size: 22),
+        const SizedBox(width: 12),
+        Text(
+          label,
+          style: GoogleFonts.inter(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: textColor,
+          ),
+        ),
+      ],
     );
   }
 }

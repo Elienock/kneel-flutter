@@ -34,6 +34,11 @@ class Unauthenticated extends AuthState {
   const Unauthenticated();
 }
 
+/// State when phone verification code has been sent.
+class PhoneCodeSent extends AuthState {
+  const PhoneCodeSent();
+}
+
 /// State when an authentication error occurs.
 class AuthError extends AuthState {
   final String message;

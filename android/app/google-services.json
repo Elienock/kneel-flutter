@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "303597920480",
+    "project_id": "kneel-d27f3",
+    "storage_bucket": "kneel-d27f3.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:303597920480:android:5d57d65d8921b7466e7085",
+        "android_client_info": {
+          "package_name": "com.elienock.kneel"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "303597920480-popo5vr9ljlhfcg1ma5crqp38chnbekm.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDYbSljYDEYFueJxUaolFdBCSQvmktavHY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "303597920480-popo5vr9ljlhfcg1ma5crqp38chnbekm.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

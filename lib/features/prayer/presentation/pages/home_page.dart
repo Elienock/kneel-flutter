@@ -1,6 +1,8 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:quick_church/core/theme/app_theme.dart';
 import 'package:quick_church/features/guided/data/mock_guided_content.dart';
@@ -9,11 +11,14 @@ import 'package:quick_church/features/guided/presentation/widgets/guided_session
 import 'package:quick_church/features/prayer/domain/entities/prayer.dart';
 import 'package:quick_church/features/prayer/presentation/bloc/prayer_cubit.dart';
 import 'package:quick_church/features/prayer/presentation/bloc/prayer_state.dart';
-import 'package:quick_church/features/prayer/presentation/pages/about_page.dart';
 import 'package:quick_church/features/prayer/presentation/widgets/daily_verse_card.dart';
 import 'package:quick_church/features/prayer/presentation/widgets/prayer_detail_sheet.dart';
+import 'package:quick_church/features/profile/presentation/bloc/profile_cubit.dart';
+import 'package:quick_church/features/profile/presentation/bloc/profile_state.dart';
+import 'package:quick_church/features/profile/presentation/pages/profile_page.dart';
+import 'package:quick_church/features/profile/presentation/widgets/email_verification_banner.dart';
 
-/// Home tab displaying daily verse, streak summary, and recent prayers.
+/// Home tab with YouVersion-style dual-view: Today and Community.
 class HomePage extends StatelessWidget {
   final VoidCallback? onNavigateToPrayers;
 
@@ -24,72 +29,782 @@ class HomePage extends StatelessWidget {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    return Scaffold(
-      backgroundColor: isDark ? AppTheme.darkBackground : AppTheme.lightBackground,
-      body: SafeArea(
-        child: BlocBuilder<PrayerCubit, PrayerState>(
-          builder: (context, state) {
-            final prayers = state is PrayerLoaded ? state.prayers : <Prayer>[];
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        backgroundColor: isDark ? AppTheme.darkBackground : AppTheme.lightBackground,
+        body: SafeArea(
+          child: Column(
+            children: [
+              // Header with profile and tabs on same line
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                color: isDark ? AppTheme.darkBackground : AppTheme.lightBackground,
+                child: Row(
+                  children: [
+                    // Profile Avatar with CachedNetworkImage
+                    BlocBuilder<ProfileCubit, ProfileState>(
+                      builder: (context, profileState) {
+                        String? photoUrl;
+                        String displayName = 'U';
 
-            return CustomScrollView(
-              slivers: [
-                // App Bar
-                SliverAppBar(
-                  floating: true,
-                  backgroundColor: isDark ? AppTheme.darkBackground : AppTheme.lightBackground,
-                  title: Text(
-                    'Kneel',
-                    style: theme.textTheme.displayMedium,
-                  ),
-                  actions: [
-                    IconButton(
-                      icon: const Icon(LucideIcons.settings),
-                      onPressed: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const AboutPage()),
-                      ),
+                        if (profileState is ProfileLoaded) {
+                          photoUrl = profileState.profile.photoUrl;
+                          displayName = profileState.profile.displayName;
+                        }
+
+                        return GestureDetector(
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const ProfilePage()),
+                          ),
+                          child: Container(
+                            width: 36,
+                            height: 36,
+                            decoration: const BoxDecoration(
+                              color: AppTheme.primaryColor,
+                              shape: BoxShape.circle,
+                            ),
+                            child: photoUrl != null && photoUrl.isNotEmpty
+                                ? ClipOval(
+                                    child: CachedNetworkImage(
+                                      imageUrl: photoUrl,
+                                      fit: BoxFit.cover,
+                                      width: 36,
+                                      height: 36,
+                                      placeholder: (_, __) => Center(
+                                        child: Text(
+                                          displayName.isNotEmpty ? displayName[0].toUpperCase() : 'U',
+                                          style: GoogleFonts.outfit(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      ),
+                                      errorWidget: (_, __, ___) => const Center(
+                                        child: Icon(
+                                          LucideIcons.user,
+                                          color: Colors.white,
+                                          size: 18,
+                                        ),
+                                      ),
+                                    ),
+                                  )
+                                : Center(
+                                    child: Text(
+                                      displayName.isNotEmpty ? displayName[0].toUpperCase() : 'U',
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(width: 16),
+                    // Tab Bar
+                    Expanded(
+                      child: _HomeTabBar(isDark: isDark),
                     ),
                   ],
                 ),
-
-                // Content
-                SliverPadding(
-                  padding: const EdgeInsets.all(16),
-                  sliver: SliverList(
-                    delegate: SliverChildListDelegate([
-                      // Daily Verse Header
-                      const DailyVerseCard(),
-                      const SizedBox(height: 24),
-
-                      // Streak Summary Card
-                      _StreakSummaryCard(prayers: prayers),
-                      const SizedBox(height: 24),
-
-                      // Quick Actions
-                      _QuickActionsRow(prayers: prayers),
-                      const SizedBox(height: 24),
-
-                      // Guided Sessions Section
-                      _GuidedSessionsSection(),
-                      const SizedBox(height: 24),
-
-                      // Recent Prayers Section
-                      _RecentPrayersSection(
-                        prayers: prayers,
-                        onSeeAll: onNavigateToPrayers,
-                      ),
-                      const SizedBox(height: 100),
-                    ]),
-                  ),
+              ),
+              // Tab content
+              Expanded(
+                child: TabBarView(
+                  children: [
+                    _TodayView(onNavigateToPrayers: onNavigateToPrayers),
+                    const _CommunityView(),
+                  ],
                 ),
-              ],
-            );
-          },
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
+
+/// Simple TabBar with underline indicator.
+class _HomeTabBar extends StatelessWidget {
+  final bool isDark;
+
+  const _HomeTabBar({required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    return TabBar(
+      isScrollable: true,
+      tabAlignment: TabAlignment.start,
+      indicatorColor: AppTheme.primaryColor,
+      indicatorWeight: 3,
+      indicatorSize: TabBarIndicatorSize.label,
+      dividerColor: Colors.transparent,
+      labelColor: isDark ? Colors.white : Colors.black,
+      unselectedLabelColor: isDark ? Colors.white54 : Colors.black45,
+      labelStyle: GoogleFonts.inter(
+        fontSize: 16,
+        fontWeight: FontWeight.w600,
+      ),
+      unselectedLabelStyle: GoogleFonts.inter(
+        fontSize: 16,
+        fontWeight: FontWeight.w500,
+      ),
+      labelPadding: const EdgeInsets.symmetric(horizontal: 12),
+      tabs: const [
+        Tab(text: 'Today'),
+        Tab(text: 'Community'),
+      ],
+    );
+  }
+}
+
+/// Time-based greeting widget using ProfileCubit for user data.
+class _GreetingWidget extends StatelessWidget {
+  const _GreetingWidget();
+
+  String _getGreeting() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) {
+      return 'Good morning';
+    } else if (hour < 17) {
+      return 'Good afternoon';
+    } else {
+      return 'Good evening';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return BlocBuilder<ProfileCubit, ProfileState>(
+      builder: (context, state) {
+        String userName = 'Friend';
+
+        if (state is ProfileLoaded) {
+          userName = state.profile.displayName.split(' ').first;
+        } else if (state is ProfileNeedsOnboarding) {
+          userName = state.profile.displayName.split(' ').first;
+        }
+
+        return Text(
+          '${_getGreeting()}, $userName',
+          style: GoogleFonts.outfit(
+            fontSize: 26,
+            fontWeight: FontWeight.bold,
+            color: isDark ? Colors.white : Colors.black,
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Today View - Daily verse, streaks, quick actions, guided sessions, recent prayers.
+class _TodayView extends StatelessWidget {
+  final VoidCallback? onNavigateToPrayers;
+
+  const _TodayView({this.onNavigateToPrayers});
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<PrayerCubit, PrayerState>(
+      builder: (context, state) {
+        final prayers = state is PrayerLoaded ? state.prayers : <Prayer>[];
+
+        return ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            // Email Verification Banner (only for unverified email users)
+            const EmailVerificationBanner(),
+
+            // Time-based Greeting
+            const _GreetingWidget(),
+            const SizedBox(height: 20),
+
+            // Daily Verse Header
+            const DailyVerseCard(),
+            const SizedBox(height: 24),
+
+            // Streak Summary Card
+            _StreakSummaryCard(prayers: prayers),
+            const SizedBox(height: 24),
+
+            // Quick Actions
+            _QuickActionsRow(prayers: prayers),
+            const SizedBox(height: 24),
+
+            // Guided Sessions Section
+            _GuidedSessionsSection(),
+            const SizedBox(height: 24),
+
+            // Recent Prayers Section
+            _RecentPrayersSection(
+              prayers: prayers,
+              onSeeAll: onNavigateToPrayers,
+            ),
+            const SizedBox(height: 100),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// Community View - Friend activity feed and shared prayer intentions.
+class _CommunityView extends StatelessWidget {
+  const _CommunityView();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        // Friends Activity Header
+        const _SectionHeader(
+          title: 'Friend Activity',
+          icon: LucideIcons.activity,
+        ),
+        const SizedBox(height: 12),
+
+        // Activity Feed
+        ..._mockFriendActivities.map((activity) => _FriendActivityCard(
+              activity: activity,
+              isDark: isDark,
+            )),
+
+        const SizedBox(height: 24),
+
+        // Shared Intentions Section
+        _SectionHeader(
+          title: 'Shared Intentions',
+          icon: LucideIcons.heart,
+          actionLabel: 'See all',
+          onAction: () {},
+        ),
+        const SizedBox(height: 12),
+
+        ..._mockSharedIntentions.map((intention) => _SharedIntentionCard(
+              intention: intention,
+              isDark: isDark,
+            )),
+
+        const SizedBox(height: 24),
+
+        // Prayer Groups Section
+        _SectionHeader(
+          title: 'Your Groups',
+          icon: LucideIcons.users,
+          actionLabel: 'Join more',
+          onAction: () {},
+        ),
+        const SizedBox(height: 12),
+
+        SizedBox(
+          height: 120,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: _mockPrayerGroups.length,
+            itemBuilder: (context, index) {
+              return Padding(
+                padding: EdgeInsets.only(
+                  right: index < _mockPrayerGroups.length - 1 ? 12 : 0,
+                ),
+                child: _PrayerGroupCard(
+                  group: _mockPrayerGroups[index],
+                  isDark: isDark,
+                ),
+              );
+            },
+          ),
+        ),
+
+        const SizedBox(height: 100),
+      ],
+    );
+  }
+}
+
+/// Section header widget with optional action button.
+class _SectionHeader extends StatelessWidget {
+  final String title;
+  final IconData icon;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+
+  const _SectionHeader({
+    required this.title,
+    required this.icon,
+    this.actionLabel,
+    this.onAction,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Row(
+      children: [
+        Icon(
+          icon,
+          size: 20,
+          color: AppTheme.primaryColor,
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            title,
+            style: GoogleFonts.outfit(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: theme.colorScheme.onSurface,
+            ),
+          ),
+        ),
+        if (actionLabel != null)
+          TextButton(
+            onPressed: onAction,
+            child: Text(
+              actionLabel!,
+              style: GoogleFonts.inter(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: AppTheme.primaryColor,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// Friend activity card widget.
+class _FriendActivityCard extends StatelessWidget {
+  final _FriendActivity activity;
+  final bool isDark;
+
+  const _FriendActivityCard({
+    required this.activity,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? AppTheme.darkSurface : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Avatar
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: activity.avatarColor.withValues(alpha: 0.2),
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: Text(
+                activity.name[0],
+                style: GoogleFonts.outfit(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: activity.avatarColor,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                RichText(
+                  text: TextSpan(
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      color: isDark ? Colors.white : Colors.black87,
+                    ),
+                    children: [
+                      TextSpan(
+                        text: activity.name,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      TextSpan(text: ' ${activity.action}'),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  activity.timeAgo,
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    color: isDark ? Colors.white38 : Colors.black38,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Icon(
+            activity.icon,
+            size: 20,
+            color: AppTheme.primaryColor,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Shared intention card widget.
+class _SharedIntentionCard extends StatelessWidget {
+  final _SharedIntention intention;
+  final bool isDark;
+
+  const _SharedIntentionCard({
+    required this.intention,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? AppTheme.darkSurface : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: AppTheme.primaryColor.withValues(alpha: 0.2),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryColor.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: Text(
+                    intention.author[0],
+                    style: GoogleFonts.outfit(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.primaryColor,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  intention.author,
+                  style: GoogleFonts.inter(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.white : Colors.black87,
+                  ),
+                ),
+              ),
+              Text(
+                intention.timeAgo,
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  color: isDark ? Colors.white38 : Colors.black38,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            intention.content,
+            style: GoogleFonts.inter(
+              fontSize: 14,
+              color: isDark ? Colors.white70 : Colors.black87,
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              _IntentionStat(
+                icon: LucideIcons.heart,
+                count: intention.prayerCount,
+                label: 'praying',
+                isDark: isDark,
+              ),
+              const SizedBox(width: 16),
+              _IntentionStat(
+                icon: LucideIcons.messageCircle,
+                count: intention.commentCount,
+                label: 'comments',
+                isDark: isDark,
+              ),
+              const Spacer(),
+              TextButton.icon(
+                onPressed: () {},
+                icon: const Icon(LucideIcons.handMetal, size: 16),
+                label: const Text('Pray'),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppTheme.primaryColor,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Intention stat widget.
+class _IntentionStat extends StatelessWidget {
+  final IconData icon;
+  final int count;
+  final String label;
+  final bool isDark;
+
+  const _IntentionStat({
+    required this.icon,
+    required this.count,
+    required this.label,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          icon,
+          size: 14,
+          color: isDark ? Colors.white38 : Colors.black38,
+        ),
+        const SizedBox(width: 4),
+        Text(
+          '$count $label',
+          style: GoogleFonts.inter(
+            fontSize: 12,
+            color: isDark ? Colors.white38 : Colors.black38,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Prayer group card widget.
+class _PrayerGroupCard extends StatelessWidget {
+  final _PrayerGroup group;
+  final bool isDark;
+
+  const _PrayerGroupCard({
+    required this.group,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 160,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            group.color,
+            group.color.withValues(alpha: 0.7),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            group.icon,
+            color: Colors.white,
+            size: 24,
+          ),
+          const Spacer(),
+          Text(
+            group.name,
+            style: GoogleFonts.outfit(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${group.memberCount} members',
+            style: GoogleFonts.inter(
+              fontSize: 12,
+              color: Colors.white70,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// Mock Data Models
+// ============================================================================
+
+class _FriendActivity {
+  final String name;
+  final String action;
+  final String timeAgo;
+  final Color avatarColor;
+  final IconData icon;
+
+  const _FriendActivity({
+    required this.name,
+    required this.action,
+    required this.timeAgo,
+    required this.avatarColor,
+    required this.icon,
+  });
+}
+
+class _SharedIntention {
+  final String author;
+  final String content;
+  final String timeAgo;
+  final int prayerCount;
+  final int commentCount;
+
+  const _SharedIntention({
+    required this.author,
+    required this.content,
+    required this.timeAgo,
+    required this.prayerCount,
+    required this.commentCount,
+  });
+}
+
+class _PrayerGroup {
+  final String name;
+  final int memberCount;
+  final Color color;
+  final IconData icon;
+
+  const _PrayerGroup({
+    required this.name,
+    required this.memberCount,
+    required this.color,
+    required this.icon,
+  });
+}
+
+// Mock data
+const _mockFriendActivities = [
+  _FriendActivity(
+    name: 'Sarah M.',
+    action: 'completed a 7-day prayer streak',
+    timeAgo: '2h ago',
+    avatarColor: Color(0xFF30D158),
+    icon: LucideIcons.flame,
+  ),
+  _FriendActivity(
+    name: 'David K.',
+    action: 'started praying for your intention',
+    timeAgo: '4h ago',
+    avatarColor: Color(0xFF5856D6),
+    icon: LucideIcons.heart,
+  ),
+  _FriendActivity(
+    name: 'Emma R.',
+    action: 'shared a prayer request',
+    timeAgo: '6h ago',
+    avatarColor: Color(0xFFFF9500),
+    icon: LucideIcons.share2,
+  ),
+];
+
+const _mockSharedIntentions = [
+  _SharedIntention(
+    author: 'Michael T.',
+    content: 'Please pray for my grandmother who is in the hospital. She has been fighting pneumonia for two weeks.',
+    timeAgo: '1h ago',
+    prayerCount: 24,
+    commentCount: 5,
+  ),
+  _SharedIntention(
+    author: 'Grace L.',
+    content: 'Praying for wisdom as I start my new job next week. Would appreciate your prayers!',
+    timeAgo: '3h ago',
+    prayerCount: 18,
+    commentCount: 3,
+  ),
+];
+
+const _mockPrayerGroups = [
+  _PrayerGroup(
+    name: 'Morning Devotion',
+    memberCount: 156,
+    color: Color(0xFF673AB7),
+    icon: LucideIcons.sunrise,
+  ),
+  _PrayerGroup(
+    name: 'Youth Ministry',
+    memberCount: 89,
+    color: Color(0xFF30D158),
+    icon: LucideIcons.users,
+  ),
+  _PrayerGroup(
+    name: 'Healing Circle',
+    memberCount: 234,
+    color: Color(0xFFFF9500),
+    icon: LucideIcons.heart,
+  ),
+];
+
+// ============================================================================
+// Original Today View Components (Preserved)
+// ============================================================================
 
 /// Streak summary card showing prayer consistency.
 class _StreakSummaryCard extends StatelessWidget {

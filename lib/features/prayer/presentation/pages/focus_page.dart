@@ -25,16 +25,12 @@ class _FocusPageState extends State<FocusPage> {
   int _currentIndex = 0;
   final PageController _pageController = PageController();
   bool _isInFocusMode = false;
-  int _selectedDuration = 5; // Default 5 minutes
+  bool _isSelectingPrayers = false;
+  int _selectedDuration = 5;
   int _prayersPrayed = 0;
   DateTime? _sessionStartTime;
   bool _quickPrayInitialized = false;
-
-  @override
-  void initState() {
-    super.initState();
-    // Quick pray mode will be initiated after first build when prayers are loaded
-  }
+  Set<String> _selectedPrayerIds = {};
 
   @override
   void dispose() {
@@ -42,9 +38,17 @@ class _FocusPageState extends State<FocusPage> {
     super.dispose();
   }
 
-  void _startFocusMode(int durationMinutes) {
+  void _showPrayerSelection(List<Prayer> prayers, int durationMinutes) {
     setState(() {
       _selectedDuration = durationMinutes;
+      _isSelectingPrayers = true;
+      _selectedPrayerIds = prayers.map((p) => p.id).toSet();
+    });
+  }
+
+  void _startFocusMode(List<Prayer> selectedPrayers) {
+    setState(() {
+      _isSelectingPrayers = false;
       _isInFocusMode = true;
       _prayersPrayed = 0;
       _sessionStartTime = DateTime.now();
@@ -80,13 +84,60 @@ class _FocusPageState extends State<FocusPage> {
         if (widget.quickPrayMode && !_quickPrayInitialized && activePrayers.isNotEmpty) {
           _quickPrayInitialized = true;
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            _startFocusMode(1); // 1 minute for quick pray
+            setState(() {
+              _selectedDuration = 1;
+              _isInFocusMode = true;
+              _prayersPrayed = 0;
+              _sessionStartTime = DateTime.now();
+              _selectedPrayerIds = activePrayers.map((p) => p.id).toSet();
+            });
           });
         }
 
-        if (_isInFocusMode) {
-          return _FocusModeView(
+        // Prayer Selection Screen
+        if (_isSelectingPrayers) {
+          return _PrayerSelectionScreen(
             prayers: activePrayers,
+            selectedIds: _selectedPrayerIds,
+            duration: _selectedDuration,
+            onTogglePrayer: (id) {
+              setState(() {
+                if (_selectedPrayerIds.contains(id)) {
+                  _selectedPrayerIds.remove(id);
+                } else {
+                  _selectedPrayerIds.add(id);
+                }
+              });
+            },
+            onSelectAll: () {
+              setState(() {
+                _selectedPrayerIds = activePrayers.map((p) => p.id).toSet();
+              });
+            },
+            onDeselectAll: () {
+              setState(() {
+                _selectedPrayerIds.clear();
+              });
+            },
+            onCancel: () => setState(() => _isSelectingPrayers = false),
+            onStart: () {
+              final selectedPrayers = activePrayers
+                  .where((p) => _selectedPrayerIds.contains(p.id))
+                  .toList();
+              if (selectedPrayers.isNotEmpty) {
+                _startFocusMode(selectedPrayers);
+              }
+            },
+          );
+        }
+
+        // Focus Mode View
+        if (_isInFocusMode) {
+          final selectedPrayers = activePrayers
+              .where((p) => _selectedPrayerIds.contains(p.id))
+              .toList();
+          return _FocusModeView(
+            prayers: selectedPrayers.isNotEmpty ? selectedPrayers : activePrayers,
             currentIndex: _currentIndex,
             pageController: _pageController,
             selectedDuration: _selectedDuration,
@@ -97,42 +148,58 @@ class _FocusPageState extends State<FocusPage> {
           );
         }
 
+        // Main Focus Page
         return Scaffold(
           backgroundColor:
               isDark ? AppTheme.darkBackground : AppTheme.lightBackground,
           body: SafeArea(
             child: CustomScrollView(
               slivers: [
-                // App Bar
                 SliverAppBar(
                   floating: true,
                   backgroundColor:
                       isDark ? AppTheme.darkBackground : AppTheme.lightBackground,
                   title: Text(
                     'Focus',
-                    style: theme.textTheme.displayMedium,
+                    style: GoogleFonts.outfit(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
-
-                // Content
                 SliverPadding(
                   padding: const EdgeInsets.all(16),
                   sliver: SliverList(
                     delegate: SliverChildListDelegate([
-                      // Focus Mode Card with Duration Selection
-                      _FocusModeIntroCard(
+                      // Sacred Timer Card with Duration Selection
+                      _SacredTimerCard(
                         prayerCount: activePrayers.length,
                         onStartFocus: activePrayers.isNotEmpty
-                            ? _startFocusMode
+                            ? (duration) => _showPrayerSelection(activePrayers, duration)
                             : null,
                       ),
                       const SizedBox(height: 24),
 
-                      // Quick Prayer List Preview
+                      // Prayer Queue Preview
                       if (activePrayers.isNotEmpty) ...[
-                        Text(
-                          'Prayer Queue',
-                          style: theme.textTheme.titleLarge,
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Prayer Queue',
+                              style: GoogleFonts.outfit(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Text(
+                              '${activePrayers.length} prayers',
+                              style: GoogleFonts.inter(
+                                fontSize: 14,
+                                color: isDark ? Colors.white54 : Colors.black45,
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 12),
                         ...activePrayers.take(5).map((prayer) => _PrayerQueueItem(
@@ -163,22 +230,24 @@ class _FocusPageState extends State<FocusPage> {
   }
 }
 
-/// Focus mode intro card with duration selection.
-class _FocusModeIntroCard extends StatefulWidget {
+/// Sacred Timer card with custom duration selection.
+class _SacredTimerCard extends StatefulWidget {
   final int prayerCount;
   final void Function(int duration)? onStartFocus;
 
-  const _FocusModeIntroCard({
+  const _SacredTimerCard({
     required this.prayerCount,
     this.onStartFocus,
   });
 
   @override
-  State<_FocusModeIntroCard> createState() => _FocusModeIntroCardState();
+  State<_SacredTimerCard> createState() => _SacredTimerCardState();
 }
 
-class _FocusModeIntroCardState extends State<_FocusModeIntroCard> {
+class _SacredTimerCardState extends State<_SacredTimerCard> {
   int _selectedDuration = 5;
+  bool _showCustomPicker = false;
+  int _customMinutes = 15;
 
   @override
   Widget build(BuildContext context) {
@@ -195,7 +264,7 @@ class _FocusModeIntroCardState extends State<_FocusModeIntroCard> {
               ? [const Color(0xFF2C2C2E), const Color(0xFF1C1C1E)]
               : [const Color(0xFF1C1C1E), const Color(0xFF2C2C2E)],
         ),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(24),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -223,7 +292,7 @@ class _FocusModeIntroCardState extends State<_FocusModeIntroCard> {
                 ),
                 child: Text(
                   '${widget.prayerCount} prayers',
-                  style: const TextStyle(
+                  style: GoogleFonts.inter(
                     color: Colors.white,
                     fontWeight: FontWeight.w600,
                     fontSize: 13,
@@ -233,53 +302,54 @@ class _FocusModeIntroCardState extends State<_FocusModeIntroCard> {
             ],
           ),
           const SizedBox(height: 20),
-          const Text(
+          Text(
             'Sacred Timer',
-            style: TextStyle(
+            style: GoogleFonts.outfit(
               color: Colors.white,
-              fontSize: 26,
+              fontSize: 28,
               fontWeight: FontWeight.w700,
-              height: 1.2,
             ),
           ),
           const SizedBox(height: 8),
           Text(
-            'How long would you like to dwell in prayer?',
-            style: TextStyle(
+            'Enter a sacred space of focused prayer',
+            style: GoogleFonts.inter(
               color: Colors.white.withAlpha(179),
               fontSize: 14,
-              height: 1.5,
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 24),
 
           // Duration Selection
           Text(
-            'Select Duration',
+            'SELECT DURATION',
             style: GoogleFonts.inter(
               color: Colors.white.withAlpha(153),
-              fontSize: 12,
+              fontSize: 11,
               fontWeight: FontWeight.w600,
-              letterSpacing: 1,
+              letterSpacing: 1.2,
             ),
           ),
           const SizedBox(height: 12),
+
+          // Duration chips
           Row(
-            children: [5, 10, 20].map((minutes) {
-              final isSelected = _selectedDuration == minutes;
+            children: [1, 5, 10].map((minutes) {
+              final isSelected = _selectedDuration == minutes && !_showCustomPicker;
               return Expanded(
                 child: GestureDetector(
-                  onTap: () => setState(() => _selectedDuration = minutes),
+                  onTap: () => setState(() {
+                    _selectedDuration = minutes;
+                    _showCustomPicker = false;
+                  }),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
-                    margin: EdgeInsets.only(
-                      right: minutes != 20 ? 8 : 0,
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    margin: EdgeInsets.only(right: minutes != 10 ? 8 : 0),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
                     decoration: BoxDecoration(
                       color: isSelected
                           ? AppTheme.primaryColor
-                          : Colors.white.withAlpha(26),
+                          : Colors.white.withAlpha(20),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
                         color: isSelected
@@ -305,26 +375,6 @@ class _FocusModeIntroCardState extends State<_FocusModeIntroCard> {
                             fontSize: 12,
                           ),
                         ),
-                        if (minutes >= 10)
-                          Container(
-                            margin: const EdgeInsets.only(top: 4),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.amber.withAlpha(51),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              'Deep',
-                              style: GoogleFonts.inter(
-                                color: Colors.amber,
-                                fontSize: 9,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
                       ],
                     ),
                   ),
@@ -332,8 +382,79 @@ class _FocusModeIntroCardState extends State<_FocusModeIntroCard> {
               );
             }).toList(),
           ),
+          const SizedBox(height: 8),
+
+          // Custom duration option
+          GestureDetector(
+            onTap: () => setState(() {
+              _showCustomPicker = true;
+              _selectedDuration = _customMinutes;
+            }),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+              decoration: BoxDecoration(
+                color: _showCustomPicker
+                    ? AppTheme.primaryColor
+                    : Colors.white.withAlpha(20),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: _showCustomPicker
+                      ? AppTheme.primaryColor
+                      : Colors.white.withAlpha(51),
+                  width: 2,
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    LucideIcons.settings2,
+                    color: Colors.white.withAlpha(200),
+                    size: 18,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    _showCustomPicker ? '$_customMinutes min' : 'Custom',
+                    style: GoogleFonts.inter(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Custom picker slider
+          if (_showCustomPicker) ...[
+            const SizedBox(height: 16),
+            SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                activeTrackColor: AppTheme.primaryColor,
+                inactiveTrackColor: Colors.white.withAlpha(51),
+                thumbColor: Colors.white,
+                overlayColor: AppTheme.primaryColor.withAlpha(51),
+              ),
+              child: Slider(
+                value: _customMinutes.toDouble(),
+                min: 1,
+                max: 60,
+                divisions: 59,
+                onChanged: (value) {
+                  setState(() {
+                    _customMinutes = value.round();
+                    _selectedDuration = _customMinutes;
+                  });
+                },
+              ),
+            ),
+          ],
+
           const SizedBox(height: 24),
 
+          // Start Button
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
@@ -344,9 +465,220 @@ class _FocusModeIntroCardState extends State<_FocusModeIntroCard> {
                 backgroundColor: Colors.white,
                 foregroundColor: const Color(0xFF1C1C1E),
                 padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
               icon: const Icon(LucideIcons.play),
-              label: const Text('Begin Prayer Time'),
+              label: Text(
+                'Select Prayers',
+                style: GoogleFonts.inter(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Prayer selection screen before starting focus mode.
+class _PrayerSelectionScreen extends StatelessWidget {
+  final List<Prayer> prayers;
+  final Set<String> selectedIds;
+  final int duration;
+  final void Function(String id) onTogglePrayer;
+  final VoidCallback onSelectAll;
+  final VoidCallback onDeselectAll;
+  final VoidCallback onCancel;
+  final VoidCallback onStart;
+
+  const _PrayerSelectionScreen({
+    required this.prayers,
+    required this.selectedIds,
+    required this.duration,
+    required this.onTogglePrayer,
+    required this.onSelectAll,
+    required this.onDeselectAll,
+    required this.onCancel,
+    required this.onStart,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Scaffold(
+      backgroundColor: isDark ? AppTheme.darkBackground : AppTheme.lightBackground,
+      appBar: AppBar(
+        backgroundColor: isDark ? AppTheme.darkBackground : AppTheme.lightBackground,
+        leading: IconButton(
+          icon: const Icon(LucideIcons.arrowLeft),
+          onPressed: onCancel,
+        ),
+        title: Text(
+          'Select Prayers',
+          style: GoogleFonts.outfit(fontWeight: FontWeight.w600),
+        ),
+        actions: [
+          TextButton(
+            onPressed: selectedIds.length == prayers.length
+                ? onDeselectAll
+                : onSelectAll,
+            child: Text(
+              selectedIds.length == prayers.length ? 'Deselect All' : 'Select All',
+              style: GoogleFonts.inter(
+                color: AppTheme.primaryColor,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          // Duration badge
+          Container(
+            margin: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: AppTheme.primaryColor.withAlpha(26),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(
+                  LucideIcons.timer,
+                  color: AppTheme.primaryColor,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '$duration minute${duration > 1 ? 's' : ''} session',
+                  style: GoogleFonts.inter(
+                    color: AppTheme.primaryColor,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Prayer list
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: prayers.length,
+              itemBuilder: (context, index) {
+                final prayer = prayers[index];
+                final isSelected = selectedIds.contains(prayer.id);
+
+                return GestureDetector(
+                  onTap: () => onTogglePrayer(prayer.id),
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: isDark ? AppTheme.darkSurface : Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isSelected
+                            ? AppTheme.primaryColor
+                            : Colors.transparent,
+                        width: 2,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 24,
+                          height: 24,
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? AppTheme.primaryColor
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: isSelected
+                                  ? AppTheme.primaryColor
+                                  : (isDark ? Colors.white38 : Colors.black26),
+                              width: 2,
+                            ),
+                          ),
+                          child: isSelected
+                              ? const Icon(
+                                  LucideIcons.check,
+                                  color: Colors.white,
+                                  size: 16,
+                                )
+                              : null,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                prayer.title,
+                                style: GoogleFonts.inter(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: isDark ? Colors.white : Colors.black87,
+                                ),
+                              ),
+                              if (prayer.description.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  prayer.description,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 13,
+                                    color: isDark ? Colors.white54 : Colors.black45,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+
+          // Start button
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: selectedIds.isNotEmpty ? onStart : null,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppTheme.primaryColor,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  icon: const Icon(LucideIcons.play),
+                  label: Text(
+                    'Begin Prayer Time (${selectedIds.length})',
+                    style: GoogleFonts.inter(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+              ),
             ),
           ),
         ],
@@ -381,14 +713,14 @@ class _PrayerQueueItem extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDark ? AppTheme.darkSurface : AppTheme.cardBackground,
+        color: isDark ? AppTheme.darkSurface : Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: isFirst
             ? Border.all(color: AppTheme.primaryColor, width: 2)
             : null,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withAlpha(isDark ? 77 : 13),
+            color: Colors.black.withAlpha(isDark ? 51 : 13),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -410,9 +742,9 @@ class _PrayerQueueItem extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (isFirst)
-                  const Text(
+                  Text(
                     'UP NEXT',
-                    style: TextStyle(
+                    style: GoogleFonts.inter(
                       fontSize: 10,
                       fontWeight: FontWeight.w700,
                       color: AppTheme.primaryColor,
@@ -421,7 +753,11 @@ class _PrayerQueueItem extends StatelessWidget {
                   ),
                 Text(
                   prayer.title,
-                  style: theme.textTheme.titleMedium,
+                  style: GoogleFonts.inter(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.white : Colors.black87,
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -438,7 +774,7 @@ class _PrayerQueueItem extends StatelessWidget {
               child: const Icon(
                 LucideIcons.play,
                 color: AppTheme.primaryColor,
-                size: 20,
+                size: 18,
               ),
             ),
         ],
@@ -452,6 +788,7 @@ class _EmptyFocusState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return Center(
       child: Column(
@@ -461,17 +798,24 @@ class _EmptyFocusState extends StatelessWidget {
           Icon(
             LucideIcons.crosshair,
             size: 64,
-            color: theme.colorScheme.outline,
+            color: isDark ? Colors.white38 : Colors.black26,
           ),
           const SizedBox(height: 16),
           Text(
             'No Active Prayers',
-            style: theme.textTheme.titleMedium,
+            style: GoogleFonts.outfit(
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+              color: isDark ? Colors.white : Colors.black87,
+            ),
           ),
           const SizedBox(height: 8),
           Text(
             'Add prayers to enter focus mode',
-            style: theme.textTheme.bodySmall,
+            style: GoogleFonts.inter(
+              fontSize: 14,
+              color: isDark ? Colors.white54 : Colors.black45,
+            ),
           ),
         ],
       ),
@@ -479,7 +823,7 @@ class _EmptyFocusState extends StatelessWidget {
   }
 }
 
-/// Full-screen focus mode view with timer.
+/// Full-screen focus mode view with Sacred Timer.
 class _FocusModeView extends StatefulWidget {
   final List<Prayer> prayers;
   final int currentIndex;
@@ -512,6 +856,7 @@ class _FocusModeViewState extends State<_FocusModeView>
   late int _totalSeconds;
   bool _isFinished = false;
   bool _isPaused = false;
+  bool _showMusicOverlay = false;
   late AnimationController _pulseController;
   late DateTime _startTime;
 
@@ -529,7 +874,6 @@ class _FocusModeViewState extends State<_FocusModeView>
 
     _startTimer();
 
-    // Set immersive mode
     SystemChrome.setEnabledSystemUIMode(
       SystemUiMode.immersiveSticky,
       overlays: [],
@@ -540,7 +884,6 @@ class _FocusModeViewState extends State<_FocusModeView>
   void dispose() {
     _timer.cancel();
     _pulseController.dispose();
-    // Restore system UI
     SystemChrome.setEnabledSystemUIMode(
       SystemUiMode.edgeToEdge,
       overlays: SystemUiOverlay.values,
@@ -564,9 +907,7 @@ class _FocusModeViewState extends State<_FocusModeView>
 
   void _onTimerComplete() {
     _timer.cancel();
-    setState(() {
-      _isFinished = true;
-    });
+    setState(() => _isFinished = true);
     HapticFeedback.heavyImpact();
     _pulseController.repeat(reverse: true);
   }
@@ -580,7 +921,7 @@ class _FocusModeViewState extends State<_FocusModeView>
   void _keepGoing() {
     setState(() {
       _isFinished = false;
-      _remainingSeconds = 60; // Add 1 more minute
+      _remainingSeconds = 60;
       _totalSeconds += 60;
     });
     _pulseController.stop();
@@ -589,12 +930,8 @@ class _FocusModeViewState extends State<_FocusModeView>
   }
 
   void _togglePause() {
-    setState(() {
-      _isPaused = !_isPaused;
-    });
-    if (_isPaused) {
-      HapticFeedback.lightImpact();
-    }
+    setState(() => _isPaused = !_isPaused);
+    if (_isPaused) HapticFeedback.lightImpact();
   }
 
   void _exitFocusMode() {
@@ -620,25 +957,21 @@ class _FocusModeViewState extends State<_FocusModeView>
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
-        if (!didPop) {
-          _showExitConfirmation();
-        }
+        if (!didPop) _showExitConfirmation();
       },
       child: Scaffold(
         backgroundColor: isDark ? AppTheme.darkBackground : const Color(0xFFFAFAFA),
         body: Stack(
           children: [
-            // Prayer cards
+            // Prayer content with circular timer
             PageView.builder(
               controller: widget.pageController,
               itemCount: widget.prayers.length,
               onPageChanged: widget.onPageChanged,
               itemBuilder: (context, index) {
                 final prayer = widget.prayers[index];
-                return _FocusPrayerCard(
+                return _SacredTimerPrayerCard(
                   prayer: prayer,
-                  index: index,
-                  total: widget.prayers.length,
                   progress: progress,
                   remainingTime: _formatTime(_remainingSeconds),
                   isFinished: _isFinished,
@@ -659,21 +992,10 @@ class _FocusModeViewState extends State<_FocusModeView>
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      GestureDetector(
+                      _CircleButton(
+                        icon: LucideIcons.x,
                         onTap: _showExitConfirmation,
-                        child: Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: isDark
-                                ? Colors.white.withAlpha(26)
-                                : Colors.black.withAlpha(13),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            LucideIcons.x,
-                            color: isDark ? Colors.white : const Color(0xFF1C1C1E),
-                          ),
-                        ),
+                        isDark: isDark,
                       ),
                       Container(
                         padding: const EdgeInsets.symmetric(
@@ -688,27 +1010,26 @@ class _FocusModeViewState extends State<_FocusModeView>
                         ),
                         child: Text(
                           '${widget.currentIndex + 1} of ${widget.prayers.length}',
-                          style: TextStyle(
+                          style: GoogleFonts.inter(
                             fontWeight: FontWeight.w600,
-                            color: isDark ? Colors.white : const Color(0xFF1C1C1E),
+                            color: isDark ? Colors.white : Colors.black87,
                           ),
                         ),
                       ),
-                      GestureDetector(
-                        onTap: _togglePause,
-                        child: Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: isDark
-                                ? Colors.white.withAlpha(26)
-                                : Colors.black.withAlpha(13),
-                            shape: BoxShape.circle,
+                      Row(
+                        children: [
+                          _CircleButton(
+                            icon: LucideIcons.music,
+                            onTap: () => setState(() => _showMusicOverlay = true),
+                            isDark: isDark,
                           ),
-                          child: Icon(
-                            _isPaused ? LucideIcons.play : LucideIcons.pause,
-                            color: isDark ? Colors.white : const Color(0xFF1C1C1E),
+                          const SizedBox(width: 8),
+                          _CircleButton(
+                            icon: _isPaused ? LucideIcons.play : LucideIcons.pause,
+                            onTap: _togglePause,
+                            isDark: isDark,
                           ),
-                        ),
+                        ],
                       ),
                     ],
                   ),
@@ -741,14 +1062,7 @@ class _FocusModeViewState extends State<_FocusModeView>
                 children: List.generate(
                   widget.prayers.length > 10 ? 10 : widget.prayers.length,
                   (index) {
-                    final adjustedIndex = widget.prayers.length > 10
-                        ? (widget.currentIndex ~/ (widget.prayers.length / 10))
-                            .clamp(0, 9)
-                        : index;
-                    final isActive = widget.prayers.length > 10
-                        ? adjustedIndex == index
-                        : widget.currentIndex == index;
-
+                    final isActive = widget.currentIndex == index;
                     return AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
                       margin: const EdgeInsets.symmetric(horizontal: 3),
@@ -767,6 +1081,12 @@ class _FocusModeViewState extends State<_FocusModeView>
                 ),
               ),
             ),
+
+            // Music overlay
+            if (_showMusicOverlay)
+              _MusicOverlay(
+                onClose: () => setState(() => _showMusicOverlay = false),
+              ),
           ],
         ),
       ),
@@ -777,7 +1097,6 @@ class _FocusModeViewState extends State<_FocusModeView>
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        // Mark as prayed button
         _ActionButton(
           icon: LucideIcons.heart,
           label: 'Prayed',
@@ -791,7 +1110,6 @@ class _FocusModeViewState extends State<_FocusModeView>
           },
         ),
         const SizedBox(width: 16),
-        // Mark as answered button
         _ActionButton(
           icon: LucideIcons.sparkles,
           label: 'Answered',
@@ -801,7 +1119,6 @@ class _FocusModeViewState extends State<_FocusModeView>
                   widget.prayers[widget.currentIndex].id,
                 );
             HapticFeedback.heavyImpact();
-            // Move to next prayer
             if (widget.currentIndex < widget.prayers.length - 1) {
               widget.pageController.nextPage(
                 duration: const Duration(milliseconds: 300),
@@ -838,6 +1155,9 @@ class _FocusModeViewState extends State<_FocusModeView>
                   foregroundColor: AppTheme.primaryColor,
                   side: const BorderSide(color: AppTheme.primaryColor),
                   padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
               ),
             ),
@@ -850,6 +1170,9 @@ class _FocusModeViewState extends State<_FocusModeView>
                 style: FilledButton.styleFrom(
                   backgroundColor: AppTheme.primaryColor,
                   padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
               ),
             ),
@@ -866,17 +1189,15 @@ class _FocusModeViewState extends State<_FocusModeView>
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: isDark ? AppTheme.darkSurface : AppTheme.cardBackground,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
+        backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text(
           'End Prayer Time?',
           style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
         ),
         content: Text(
           actualDuration >= 60
-              ? 'You\'ve prayed for ${actualDuration ~/ 60} minutes. Do you want to save this session?'
+              ? 'You\'ve prayed for ${actualDuration ~/ 60} minutes. Save this session?'
               : 'You\'ve only prayed for a few seconds. Exit without saving?',
         ),
         actions: [
@@ -907,21 +1228,17 @@ class _FocusModeViewState extends State<_FocusModeView>
   }
 }
 
-/// Focus prayer card with circular timer progress.
-class _FocusPrayerCard extends StatelessWidget {
+/// Sacred Timer prayer card with circular progress.
+class _SacredTimerPrayerCard extends StatelessWidget {
   final Prayer prayer;
-  final int index;
-  final int total;
   final double progress;
   final String remainingTime;
   final bool isFinished;
   final bool isPaused;
   final AnimationController pulseAnimation;
 
-  const _FocusPrayerCard({
+  const _SacredTimerPrayerCard({
     required this.prayer,
-    required this.index,
-    required this.total,
     required this.progress,
     required this.remainingTime,
     required this.isFinished,
@@ -936,45 +1253,43 @@ class _FocusPrayerCard extends StatelessWidget {
 
     return Center(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 100),
+        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 80),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Circular Timer
+            // Circular Timer with prayer text in center
             AnimatedBuilder(
               animation: pulseAnimation,
               builder: (context, child) {
-                final scale = isFinished
-                    ? 1.0 + (pulseAnimation.value * 0.05)
-                    : 1.0;
+                final scale = isFinished ? 1.0 + (pulseAnimation.value * 0.05) : 1.0;
                 return Transform.scale(
                   scale: scale,
                   child: SizedBox(
-                    width: 140,
-                    height: 140,
+                    width: 200,
+                    height: 200,
                     child: Stack(
                       alignment: Alignment.center,
                       children: [
-                        // Background circle
+                        // Background ring
                         SizedBox(
-                          width: 140,
-                          height: 140,
+                          width: 200,
+                          height: 200,
                           child: CircularProgressIndicator(
                             value: 1,
-                            strokeWidth: 8,
+                            strokeWidth: 12,
                             backgroundColor: isDark
                                 ? Colors.white.withAlpha(26)
                                 : Colors.black.withAlpha(13),
                             color: Colors.transparent,
                           ),
                         ),
-                        // Progress circle
+                        // Progress ring
                         SizedBox(
-                          width: 140,
-                          height: 140,
+                          width: 200,
+                          height: 200,
                           child: CircularProgressIndicator(
                             value: progress,
-                            strokeWidth: 8,
+                            strokeWidth: 12,
                             backgroundColor: Colors.transparent,
                             color: isFinished
                                 ? AppTheme.answeredColor
@@ -982,7 +1297,7 @@ class _FocusPrayerCard extends StatelessWidget {
                             strokeCap: StrokeCap.round,
                           ),
                         ),
-                        // Time display
+                        // Center content
                         Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -990,32 +1305,29 @@ class _FocusPrayerCard extends StatelessWidget {
                               const Icon(
                                 LucideIcons.pause,
                                 color: AppTheme.primaryColor,
-                                size: 24,
+                                size: 32,
                               )
                             else if (isFinished)
                               const Icon(
                                 LucideIcons.check,
                                 color: AppTheme.answeredColor,
-                                size: 32,
+                                size: 40,
                               )
                             else
                               Text(
                                 remainingTime,
                                 style: GoogleFonts.outfit(
-                                  fontSize: 32,
+                                  fontSize: 42,
                                   fontWeight: FontWeight.w700,
-                                  color:
-                                      isDark ? Colors.white : const Color(0xFF1C1C1E),
+                                  color: isDark ? Colors.white : Colors.black87,
                                 ),
                               ),
                             if (!isFinished && !isPaused)
                               Text(
                                 'remaining',
                                 style: GoogleFonts.inter(
-                                  fontSize: 11,
-                                  color: isDark
-                                      ? Colors.white.withAlpha(153)
-                                      : const Color(0xFF8E8E93),
+                                  fontSize: 12,
+                                  color: isDark ? Colors.white54 : Colors.black45,
                                 ),
                               ),
                           ],
@@ -1026,7 +1338,7 @@ class _FocusPrayerCard extends StatelessWidget {
                 );
               },
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 40),
 
             // Priority badge
             if (prayer.priority == PrayerPriority.urgent)
@@ -1037,18 +1349,18 @@ class _FocusPrayerCard extends StatelessWidget {
                   color: AppTheme.urgentColor.withAlpha(26),
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: const Row(
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
+                    const Icon(
                       LucideIcons.alertTriangle,
                       size: 16,
                       color: AppTheme.urgentColor,
                     ),
-                    SizedBox(width: 4),
+                    const SizedBox(width: 4),
                     Text(
                       'URGENT',
-                      style: TextStyle(
+                      style: GoogleFonts.inter(
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
                         color: AppTheme.urgentColor,
@@ -1062,27 +1374,29 @@ class _FocusPrayerCard extends StatelessWidget {
             // Prayer title
             Text(
               prayer.title,
-              style: theme.textTheme.displayMedium?.copyWith(
+              style: GoogleFonts.outfit(
+                fontSize: 28,
+                fontWeight: FontWeight.w700,
+                color: isDark ? Colors.white : Colors.black87,
                 height: 1.2,
               ),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
 
             // Prayer description
             Text(
               prayer.description,
-              style: theme.textTheme.bodyLarge?.copyWith(
+              style: GoogleFonts.inter(
+                fontSize: 16,
+                color: isDark ? Colors.white70 : Colors.black54,
                 height: 1.6,
-                color: isDark
-                    ? Colors.white.withAlpha(179)
-                    : const Color(0xFF636366),
               ),
               textAlign: TextAlign.center,
               maxLines: 4,
               overflow: TextOverflow.ellipsis,
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
 
             // Prayer count
             Row(
@@ -1090,17 +1404,274 @@ class _FocusPrayerCard extends StatelessWidget {
               children: [
                 Icon(
                   LucideIcons.heart,
-                  size: 18,
-                  color: const Color(0xFFFF6B6B).withAlpha(128),
+                  size: 16,
+                  color: const Color(0xFFFF6B6B).withAlpha(153),
                 ),
                 const SizedBox(width: 6),
                 Text(
                   'Prayed ${prayer.prayerCount} times',
-                  style: theme.textTheme.bodySmall,
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    color: isDark ? Colors.white54 : Colors.black45,
+                  ),
                 ),
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Music overlay for Spotify/Apple Music integration.
+class _MusicOverlay extends StatelessWidget {
+  final VoidCallback onClose;
+
+  const _MusicOverlay({required this.onClose});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return GestureDetector(
+      onTap: onClose,
+      child: Container(
+        color: Colors.black.withAlpha(153),
+        child: Center(
+          child: GestureDetector(
+            onTap: () {}, // Prevent closing when tapping the card
+            child: Container(
+              margin: const EdgeInsets.all(32),
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF2C2C2E) : Colors.white,
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Background Music',
+                        style: GoogleFonts.outfit(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                          color: isDark ? Colors.white : Colors.black87,
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: onClose,
+                        child: Icon(
+                          LucideIcons.x,
+                          color: isDark ? Colors.white54 : Colors.black45,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Now playing
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.white.withAlpha(13)
+                          : Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 56,
+                          height: 56,
+                          decoration: BoxDecoration(
+                            color: AppTheme.primaryColor.withAlpha(51),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(
+                            LucideIcons.music,
+                            color: AppTheme.primaryColor,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Peaceful Prayer',
+                                style: GoogleFonts.inter(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: isDark ? Colors.white : Colors.black87,
+                                ),
+                              ),
+                              Text(
+                                'Ambient Worship',
+                                style: GoogleFonts.inter(
+                                  fontSize: 13,
+                                  color: isDark ? Colors.white54 : Colors.black45,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Controls
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      IconButton(
+                        onPressed: () => HapticFeedback.lightImpact(),
+                        icon: Icon(
+                          LucideIcons.skipBack,
+                          color: isDark ? Colors.white : Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Container(
+                        width: 64,
+                        height: 64,
+                        decoration: const BoxDecoration(
+                          color: AppTheme.primaryColor,
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          onPressed: () => HapticFeedback.mediumImpact(),
+                          icon: const Icon(
+                            LucideIcons.play,
+                            color: Colors.white,
+                            size: 28,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      IconButton(
+                        onPressed: () => HapticFeedback.lightImpact(),
+                        icon: Icon(
+                          LucideIcons.skipForward,
+                          color: isDark ? Colors.white : Colors.black87,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Service buttons
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _MusicServiceButton(
+                          label: 'Spotify',
+                          color: const Color(0xFF1DB954),
+                          onTap: () {
+                            HapticFeedback.lightImpact();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Spotify integration coming soon'),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _MusicServiceButton(
+                          label: 'Apple Music',
+                          color: const Color(0xFFFA243C),
+                          onTap: () {
+                            HapticFeedback.lightImpact();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Apple Music integration coming soon'),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Music service button.
+class _MusicServiceButton extends StatelessWidget {
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _MusicServiceButton({
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: color.withAlpha(26),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withAlpha(77)),
+        ),
+        child: Center(
+          child: Text(
+            label,
+            style: GoogleFonts.inter(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Circle button helper widget.
+class _CircleButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  final bool isDark;
+
+  const _CircleButton({
+    required this.icon,
+    required this.onTap,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: isDark ? Colors.white.withAlpha(26) : Colors.black.withAlpha(13),
+          shape: BoxShape.circle,
+        ),
+        child: Icon(
+          icon,
+          color: isDark ? Colors.white : Colors.black87,
+          size: 22,
         ),
       ),
     );
@@ -1130,9 +1701,7 @@ class _ActionButton extends StatelessWidget {
         decoration: BoxDecoration(
           color: color.withAlpha(26),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: color.withAlpha(77),
-          ),
+          border: Border.all(color: color.withAlpha(77)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -1141,7 +1710,7 @@ class _ActionButton extends StatelessWidget {
             const SizedBox(width: 8),
             Text(
               label,
-              style: TextStyle(
+              style: GoogleFonts.inter(
                 color: color,
                 fontWeight: FontWeight.w600,
                 fontSize: 16,

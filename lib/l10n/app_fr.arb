@@ -12,7 +12,8 @@
   "welcomeSubtitle": "Suivez vos prieres, cultivez des habitudes spirituelles,\net grandissez dans la foi ensemble.",
 
   "continueWithGoogle": "Continuer avec Google",
-  "continueWithApple": "Continuer avec Apple",
+  "usePhoneNumber": "Utiliser le numero de telephone",
+  "emailLogin": "Connexion par email",
   "loginWithBiometrics": "Connexion biometrique",
   "termsText": "En continuant, vous acceptez nos Conditions d'utilisation\net notre Politique de confidentialite",
   "signingIn": "Connexion en cours...",

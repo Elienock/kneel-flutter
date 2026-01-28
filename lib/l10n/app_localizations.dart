@@ -152,11 +152,17 @@ abstract class AppLocalizations {
   /// **'Continue with Google'**
   String get continueWithGoogle;
 
-  /// Apple sign in button text
+  /// Phone sign in button text
   ///
   /// In en, this message translates to:
-  /// **'Continue with Apple'**
-  String get continueWithApple;
+  /// **'Use Phone Number'**
+  String get usePhoneNumber;
+
+  /// Email sign in button text
+  ///
+  /// In en, this message translates to:
+  /// **'Email Login'**
+  String get emailLogin;
 
   /// Biometric login button text
   ///

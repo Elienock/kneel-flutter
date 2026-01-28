@@ -37,7 +37,10 @@ class AppLocalizationsFr extends AppLocalizations {
   String get continueWithGoogle => 'Continuer avec Google';
 
   @override
-  String get continueWithApple => 'Continuer avec Apple';
+  String get usePhoneNumber => 'Utiliser le numero de telephone';
+
+  @override
+  String get emailLogin => 'Connexion par email';
 
   @override
   String get loginWithBiometrics => 'Connexion biometrique';

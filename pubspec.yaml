@@ -23,6 +23,14 @@ dependencies:
   # Biometric Authentication
   local_auth: ^2.1.6
 
+  # Firebase
+  firebase_core: ^3.13.0
+  firebase_auth: ^5.5.3
+  google_sign_in: ^6.2.1
+
+  # Supabase
+  supabase_flutter: ^2.8.4
+
   # Connectivity
   connectivity_plus: ^5.0.1
 
@@ -59,6 +67,33 @@ dependencies:
 
   # Splash Screen
   flutter_native_splash: ^2.3.8
+
+  # Image Caching (for data-conscious users in SA/DRC)
+  cached_network_image: ^3.3.1
+
+  # Image Picker for avatar upload
+  image_picker: ^1.0.7
+
+  # Image Cropping for square avatar
+  image_cropper: ^8.0.2
+
+  # Image Compression for bandwidth optimization
+  flutter_image_compress: ^2.3.0
+
+  # Path utilities
+  path: ^1.9.0
+
+  # Google Places for location search
+  google_places_flutter: ^2.0.9
+
+  # HTTP client for Places API (New)
+  http: ^1.2.0
+
+  # Geolocation for location bias
+  geolocator: ^12.0.0
+
+  # Premium animations
+  animate_do: ^3.3.4
 
 dev_dependencies:
   flutter_test:

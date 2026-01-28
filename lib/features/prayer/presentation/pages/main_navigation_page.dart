@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:quick_church/core/theme/app_theme.dart';
-import 'package:quick_church/features/community/presentation/pages/community_page.dart';
 import 'package:quick_church/features/insights/presentation/pages/insights_page.dart';
 import 'package:quick_church/features/prayer/presentation/pages/focus_page.dart';
 import 'package:quick_church/features/prayer/presentation/pages/home_page.dart';
 import 'package:quick_church/features/prayer/presentation/pages/prayers_page.dart';
 import 'package:quick_church/features/prayer/presentation/widgets/add_prayer_bottom_sheet.dart';
-import 'package:quick_church/features/profile/presentation/pages/profile_page.dart';
+import 'package:quick_church/features/sermon/presentation/pages/sermon_vault_page.dart';
+import 'package:quick_church/features/sermon/presentation/pages/sermon_editor_page.dart';
 
 /// Main navigation shell with YouVersion-style bottom navigation.
 class MainNavigationPage extends StatefulWidget {
@@ -25,7 +25,7 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
   final PageStorageBucket _bucket = PageStorageBucket();
 
   // Navigation items with Lucide icons (modern outline look)
-  // New tabs: Home, Prayers, Community, Insights, Profile
+  // Tabs: Home, Prayers, Sermon Vault, Insights, Focus
   static const List<_NavItem> _navItems = [
     _NavItem(
       icon: LucideIcons.home,
@@ -38,9 +38,9 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
       label: 'Prayers',
     ),
     _NavItem(
-      icon: LucideIcons.users,
-      selectedIcon: LucideIcons.users,
-      label: 'Community',
+      icon: LucideIcons.bookOpen,
+      selectedIcon: LucideIcons.bookOpen,
+      label: 'Sermons',
     ),
     _NavItem(
       icon: LucideIcons.barChart2,
@@ -48,9 +48,9 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
       label: 'Insights',
     ),
     _NavItem(
-      icon: LucideIcons.user,
-      selectedIcon: LucideIcons.user,
-      label: 'Profile',
+      icon: LucideIcons.crosshair,
+      selectedIcon: LucideIcons.crosshair,
+      label: 'Focus',
     ),
   ];
 
@@ -79,9 +79,9 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
               onNavigateToPrayers: () => setState(() => _currentIndex = 1),
             ),
             const PrayersPage(key: PageStorageKey('prayers')),
-            const CommunityPage(key: PageStorageKey('community')),
+            const SermonVaultPage(key: PageStorageKey('sermons')),
             const InsightsPage(key: PageStorageKey('insights')),
-            const ProfilePage(key: PageStorageKey('profile')),
+            const FocusPage(key: PageStorageKey('focus')),
           ],
         ),
       ),
@@ -116,6 +116,23 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
         onPressed: () => AddPrayerBottomSheet.show(context),
         icon: const Icon(LucideIcons.plus),
         label: const Text('New Prayer'),
+      );
+    }
+
+    // Add Sermon Note FAB on Sermon Vault tab
+    if (_currentIndex == 2) {
+      return FloatingActionButton.extended(
+        heroTag: 'add_sermon',
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const SermonEditorPage(),
+            ),
+          );
+        },
+        icon: const Icon(LucideIcons.plus),
+        label: const Text('New Note'),
       );
     }
 
