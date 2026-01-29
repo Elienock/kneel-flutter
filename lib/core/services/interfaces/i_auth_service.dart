@@ -79,4 +79,26 @@ abstract class IAuthService {
 
   /// Signs out the current user.
   Future<void> logout();
+
+  /// Force global logout - clears ALL session data.
+  /// Use when user is deleted from backend or session is corrupted.
+  /// 1. Signs out from Firebase
+  /// 2. Clears SharedPreferences session flags
+  /// 3. Clears Google Sign-In cache
+  @Deprecated('Use forceLogoutAndClearAllData instead')
+  Future<void> forceGlobalLogout();
+
+  /// Self-Healing Session Reset: Nuclear option for zombie sessions.
+  ///
+  /// Clears ALL persistent data to allow a fresh start:
+  /// 1. Signs out from Firebase Auth
+  /// 2. Disconnects Google Sign-In (clears cached account)
+  /// 3. Clears ALL SharedPreferences (session flags, user prefs)
+  /// 4. Returns true if successful, false if any step failed
+  ///
+  /// Use cases:
+  /// - User deleted from backend but local session persists
+  /// - PostgrestException with 'User Not Found' or 'Unauthorized'
+  /// - Debug reset button in development
+  Future<bool> forceLogoutAndClearAllData();
 }

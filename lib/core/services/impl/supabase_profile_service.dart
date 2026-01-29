@@ -3,7 +3,7 @@ import 'dart:typed_data';
 import 'package:injectable/injectable.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:quick_church/core/services/interfaces/i_profile_service.dart';
-import 'package:quick_church/core/utils/debug_logger.dart';
+import 'package:quick_church/core/utils/kneel_logger.dart';
 import 'package:quick_church/features/profile/domain/entities/profile.dart';
 
 /// Implementation of [IProfileService] using Supabase.
@@ -40,10 +40,10 @@ class SupabaseProfileService implements IProfileService {
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final cacheBustedUrl = '$publicUrl?v=$timestamp';
 
-      DebugLogger.log('Profile photo uploaded: $cacheBustedUrl');
+      KneelLogger.log('Profile photo uploaded: $cacheBustedUrl');
       return cacheBustedUrl;
     } catch (e) {
-      DebugLogger.error('SupabaseProfileService.uploadProfilePhoto', e);
+      KneelLogger.error('SupabaseProfileService.uploadProfilePhoto', e);
       rethrow;
     }
   }
@@ -60,10 +60,10 @@ class SupabaseProfileService implements IProfileService {
 
         // Delete all files in the user's folder
         await _client.storage.from(_avatarBucket).remove(filePaths);
-        DebugLogger.log('Deleted ${filePaths.length} storage files for user: $uid');
+        KneelLogger.log('Deleted ${filePaths.length} storage files for user: $uid');
       }
     } catch (e) {
-      DebugLogger.error('SupabaseProfileService.deleteUserStorageFiles', e);
+      KneelLogger.error('SupabaseProfileService.deleteUserStorageFiles', e);
       // Don't rethrow - storage deletion failure shouldn't block account deletion
     }
   }
@@ -109,10 +109,10 @@ class SupabaseProfileService implements IProfileService {
           .select()
           .single();
 
-      DebugLogger.profileSynced(uid);
+      KneelLogger.profileSynced(uid);
       return Profile.fromJson(response);
     } catch (e) {
-      DebugLogger.error('SupabaseProfileService.upsertProfile', e);
+      KneelLogger.error('SupabaseProfileService.upsertProfile', e);
       rethrow;
     }
   }
@@ -129,7 +129,7 @@ class SupabaseProfileService implements IProfileService {
       if (response == null) return null;
       return Profile.fromJson(response);
     } catch (e) {
-      DebugLogger.error('SupabaseProfileService.getProfile', e);
+      KneelLogger.error('SupabaseProfileService.getProfile', e);
       return null;
     }
   }
@@ -163,10 +163,10 @@ class SupabaseProfileService implements IProfileService {
           .select()
           .single();
 
-      DebugLogger.log('Profile updated for: $uid');
+      KneelLogger.log('Profile updated for: $uid');
       return Profile.fromJson(response);
     } catch (e) {
-      DebugLogger.error('SupabaseProfileService.updateProfile', e);
+      KneelLogger.error('SupabaseProfileService.updateProfile', e);
       rethrow;
     }
   }
@@ -199,9 +199,9 @@ class SupabaseProfileService implements IProfileService {
   Future<void> deleteProfile(String uid) async {
     try {
       await _client.from('profiles').delete().eq('id', uid);
-      DebugLogger.log('Profile deleted: $uid');
+      KneelLogger.log('Profile deleted: $uid');
     } catch (e) {
-      DebugLogger.error('SupabaseProfileService.deleteProfile', e);
+      KneelLogger.error('SupabaseProfileService.deleteProfile', e);
       rethrow;
     }
   }

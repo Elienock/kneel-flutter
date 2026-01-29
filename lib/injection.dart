@@ -4,7 +4,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:injectable/injectable.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:quick_church/core/config/env_config.dart';
-import 'package:quick_church/core/utils/debug_logger.dart';
+import 'package:quick_church/core/utils/kneel_logger.dart';
 import 'package:quick_church/features/prayer/data/models/prayer_model.dart';
 import 'package:quick_church/features/prayer/data/models/prayer_session_model.dart';
 import 'package:quick_church/features/sermon/data/models/sermon_note_model.dart';
@@ -25,14 +25,14 @@ final getIt = GetIt.instance;
 Future<void> configureDependencies() async {
   // Initialize Firebase
   await Firebase.initializeApp();
-  DebugLogger.firebaseInitialized();
+  KneelLogger.firebaseInitialized();
 
   // Initialize Supabase
   await Supabase.initialize(
     url: EnvConfig.supabaseUrl,
     anonKey: EnvConfig.supabaseAnonKey,
   );
-  DebugLogger.supabaseConnected();
+  KneelLogger.supabaseConnected();
 
   // Initialize Hive for Flutter
   await Hive.initFlutter();

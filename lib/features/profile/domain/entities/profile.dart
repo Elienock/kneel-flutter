@@ -103,6 +103,25 @@ class Profile extends Equatable {
   /// Whether the user needs to complete onboarding.
   bool get needsOnboarding => locationCity == null || locationCity!.isEmpty;
 
+  /// Validates that all required fields for navigation to Home are present.
+  /// Used by Smart Router to ensure data integrity before navigation.
+  bool get isProfileComplete =>
+      id.isNotEmpty &&
+      displayName.isNotEmpty &&
+      locationCity != null &&
+      locationCity!.isNotEmpty;
+
+  /// Validates profile data integrity for onboarding completion.
+  /// Returns null if valid, or error message if invalid.
+  String? validateForOnboarding() {
+    if (id.isEmpty) return 'Profile ID is missing';
+    if (displayName.isEmpty) return 'Display name is required';
+    if (locationCity == null || locationCity!.isEmpty) {
+      return 'Location is required';
+    }
+    return null;
+  }
+
   /// Whether the user signed in with phone (skip email verification).
   bool get isPhoneUser => provider == 'phone';
 

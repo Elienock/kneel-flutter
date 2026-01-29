@@ -7,8 +7,10 @@ import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:injectable/injectable.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
+import 'package:quick_church/core/services/interfaces/i_auth_service.dart';
 import 'package:quick_church/core/services/interfaces/i_profile_service.dart';
-import 'package:quick_church/core/utils/debug_logger.dart';
+import 'package:quick_church/core/utils/kneel_logger.dart';
 import 'package:quick_church/features/profile/domain/entities/profile.dart';
 import 'package:quick_church/features/profile/presentation/bloc/profile_state.dart';
 
@@ -17,13 +19,27 @@ import 'package:quick_church/features/profile/presentation/bloc/profile_state.da
 @injectable
 class ProfileCubit extends Cubit<ProfileState> {
   final IProfileService _profileService;
+  final IAuthService _authService;
   StreamSubscription? _profileSubscription;
   String? _currentUserId;
 
-  ProfileCubit(this._profileService) : super(const ProfileInitial());
+  /// Timeout for Supabase profile operations (fail-safe)
+  static const _profileTimeout = Duration(seconds: 15);
+
+  /// Max retries for profile creation before assuming user is deleted
+  static const _maxCreationRetries = 2;
+  int _creationRetryCount = 0;
+
+  /// Cached auth data for retry functionality
+  _CachedAuthData? _cachedAuthData;
+
+  ProfileCubit(this._profileService, this._authService) : super(const ProfileInitial());
 
   /// Loads or creates a profile for the given user.
   /// Maps Firebase auth data to Supabase profile.
+  ///
+  /// On timeout/network error, emits [ProfileConnectionError] allowing retry.
+  /// If profile cannot be created after retries, emits [ProfileNotFound] and triggers logout.
   Future<void> loadProfile({
     required String uid,
     required String email,
@@ -33,56 +49,253 @@ class ProfileCubit extends Cubit<ProfileState> {
     String? phoneNumber,
     bool? emailVerified,
   }) async {
+    KneelLogger.log('Loading profile for $uid', context: 'Profile');
+
     emit(const ProfileLoading());
     _currentUserId = uid;
 
-    try {
-      // First, try to get existing profile
-      var profile = await _profileService.getProfile(uid);
+    // Cache auth data for retry
+    _cachedAuthData = _CachedAuthData(
+      uid: uid,
+      email: email,
+      displayName: displayName,
+      photoUrl: photoUrl,
+      provider: provider,
+      phoneNumber: phoneNumber,
+      emailVerified: emailVerified,
+    );
 
-      if (profile == null) {
-        // Create new profile if doesn't exist
-        profile = await _profileService.upsertProfile(
-          uid: uid,
-          email: email,
-          displayName: displayName,
-          photoUrl: photoUrl,
-          provider: provider,
-          phoneNumber: phoneNumber,
-          emailVerified: emailVerified,
+    // First, verify Firebase user still exists
+    final firebaseUser = firebase.FirebaseAuth.instance.currentUser;
+    if (firebaseUser == null || firebaseUser.uid != uid) {
+      KneelLogger.warn('Firebase user mismatch or null - forcing logout', context: 'Profile');
+      await _handleUserNotFound(uid, 'Firebase session invalid');
+      return;
+    }
+
+    try {
+      // Try to get existing profile with timeout
+      Profile? existingProfile;
+      bool isTimeout = false;
+
+      try {
+        existingProfile = await _profileService.getProfile(uid).timeout(
+          _profileTimeout,
+          onTimeout: () {
+            KneelLogger.warn('getProfile timed out after ${_profileTimeout.inSeconds}s', context: 'Profile');
+            isTimeout = true;
+            return null;
+          },
         );
-        DebugLogger.log('Created new profile for: $uid');
+      } catch (e) {
+        KneelLogger.error('ProfileCubit.getProfile', e);
+
+        // SELF-HEAL: Check for PostgrestException with User Not Found/Unauthorized
+        if (_isPostgrestUserNotFoundError(e)) {
+          await _handleUserNotFound(uid, 'PostgrestException: User not found or unauthorized');
+          return;
+        }
+
+        // Check for permission/auth errors that indicate deleted user
+        if (_isAuthError(e) || _isRLSError(e)) {
+          await _handleUserNotFound(uid, 'Profile access denied');
+          return;
+        }
+
+        // Check if it's a network-related error
+        if (_isNetworkError(e)) {
+          emit(ProfileConnectionError(
+            message: 'Unable to connect. Please check your internet connection.',
+            userId: uid,
+          ));
+          return;
+        }
+      }
+
+      // Handle timeout case
+      if (isTimeout) {
+        emit(ProfileConnectionError(
+          message: 'Connection timed out. Please try again.',
+          userId: uid,
+        ));
+        return;
+      }
+
+      KneelLogger.log('Existing profile = ${existingProfile != null}', context: 'Profile');
+
+      Profile profile;
+
+      if (existingProfile == null) {
+        // Create new profile if doesn't exist
+        KneelLogger.log('Creating new profile...', context: 'Profile');
+
+        try {
+          profile = await _profileService.upsertProfile(
+            uid: uid,
+            email: email,
+            displayName: displayName,
+            photoUrl: photoUrl,
+            provider: provider,
+            phoneNumber: phoneNumber,
+            emailVerified: emailVerified,
+          ).timeout(_profileTimeout);
+
+          _creationRetryCount = 0; // Reset on success
+          KneelLogger.log('Created new profile for: $uid', context: 'Profile');
+        } catch (e) {
+          KneelLogger.error('ProfileCubit.createProfile', e);
+
+          // SELF-HEAL: Check for PostgrestException with User Not Found/Unauthorized
+          if (_isPostgrestUserNotFoundError(e)) {
+            await _handleUserNotFound(uid, 'PostgrestException: Cannot create profile - user unauthorized');
+            return;
+          }
+
+          // Check if creation failed due to RLS/permissions (user deleted scenario)
+          if (_isAuthError(e) || _isRLSError(e)) {
+            _creationRetryCount++;
+            if (_creationRetryCount >= _maxCreationRetries) {
+              await _handleUserNotFound(uid, 'Unable to create profile - account may be deleted');
+              return;
+            }
+          }
+
+          rethrow;
+        }
       } else {
         // Update existing profile with latest auth data
-        // Preserve existing bio, location, and googlePlaceId
+        // IMPORTANT: Preserve existing bio, location, and googlePlaceId (Identity Sync)
+        KneelLogger.log('Merging with existing profile (preserving bio/location)...', context: 'Profile');
         profile = await _profileService.upsertProfile(
           uid: uid,
-          email: email.isNotEmpty ? email : profile.email,
-          displayName: displayName ?? profile.displayName,
-          photoUrl: photoUrl ?? profile.photoUrl,
-          provider: provider ?? profile.provider,
-          phoneNumber: phoneNumber ?? profile.phoneNumber,
-          emailVerified: emailVerified ?? profile.emailVerified,
-          bio: profile.bio,
-          locationCity: profile.locationCity,
-          googlePlaceId: profile.googlePlaceId,
-        );
-        DebugLogger.log('Updated profile for: $uid');
+          email: email.isNotEmpty ? email : existingProfile.email,
+          displayName: displayName ?? existingProfile.displayName,
+          photoUrl: photoUrl ?? existingProfile.photoUrl,
+          provider: provider ?? existingProfile.provider,
+          phoneNumber: phoneNumber ?? existingProfile.phoneNumber,
+          emailVerified: emailVerified ?? existingProfile.emailVerified,
+          // MERGE: Keep existing user data, don't overwrite with defaults
+          bio: existingProfile.bio,
+          locationCity: existingProfile.locationCity,
+          googlePlaceId: existingProfile.googlePlaceId,
+        ).timeout(_profileTimeout);
+        KneelLogger.log('Merged profile for: $uid', context: 'Profile');
       }
 
       // Check if onboarding is needed
       if (profile.needsOnboarding) {
+        KneelLogger.log('Profile needs onboarding', context: 'Profile');
         emit(ProfileNeedsOnboarding(profile));
       } else {
+        KneelLogger.log('Profile loaded successfully', context: 'Profile');
         emit(ProfileLoaded(profile));
       }
 
       // Start watching for real-time updates
       _watchProfile(uid);
+    } on TimeoutException {
+      KneelLogger.warn('Profile load timed out', context: 'Profile');
+      emit(ProfileConnectionError(
+        message: 'Connection timed out. Please try again.',
+        userId: uid,
+      ));
     } catch (e) {
-      DebugLogger.error('ProfileCubit.loadProfile', e);
-      emit(ProfileError(e.toString()));
+      KneelLogger.error('ProfileCubit.loadProfile', e);
+
+      // SELF-HEAL: Check for PostgrestException first (most specific)
+      if (_isPostgrestUserNotFoundError(e)) {
+        await _handleUserNotFound(uid, 'PostgrestException: Session invalid');
+        return;
+      }
+
+      if (_isNetworkError(e)) {
+        emit(ProfileConnectionError(
+          message: 'Unable to connect. Please check your internet connection.',
+          userId: uid,
+        ));
+      } else if (_isAuthError(e) || _isRLSError(e)) {
+        await _handleUserNotFound(uid, 'Account access error');
+      } else {
+        emit(ProfileError(e.toString()));
+      }
     }
+  }
+
+  /// Handles the case when user is not found (deleted from backend).
+  ///
+  /// SELF-HEALING LOGIC (Production):
+  /// Automatically triggers forceLogoutAndClearAllData() to prevent zombie sessions.
+  /// User is cleanly returned to auth screen for fresh sign-in.
+  Future<void> _handleUserNotFound(String uid, String reason) async {
+    KneelLogger.warn('=== SELF-HEALING TRIGGERED ===', context: 'Profile');
+    KneelLogger.warn('User not found: $reason', context: 'Profile');
+    KneelLogger.warn('Auto-clearing session to prevent zombie state...', context: 'Profile');
+
+    // Emit state briefly so UI shows feedback (optional)
+    emit(ProfileNotFound(
+      userId: uid,
+      message: 'Session expired. Signing out...',
+    ));
+
+    // Small delay for UI feedback
+    await Future.delayed(const Duration(milliseconds: 300));
+
+    // AUTO SELF-HEAL: Clear everything and return to auth
+    await forceLogoutAndClearAllData();
+  }
+
+  /// Forces a complete logout, clearing all session data.
+  /// Call this when user is deleted or session is corrupted.
+  @Deprecated('Use forceLogoutAndClearAllData instead')
+  Future<void> forceLogout() async {
+    await forceLogoutAndClearAllData();
+  }
+
+  /// Self-Healing Session Reset: Nuclear option for zombie sessions.
+  ///
+  /// Clears ALL persistent data:
+  /// 1. Calls AuthService.forceLogoutAndClearAllData()
+  /// 2. Resets ProfileCubit to initial state
+  ///
+  /// Returns true if successful.
+  Future<bool> forceLogoutAndClearAllData() async {
+    KneelLogger.log('=== PROFILE CUBIT SELF-HEAL ===', context: 'Profile');
+
+    bool success = true;
+
+    try {
+      // Call auth service to clear Firebase/Google/SharedPrefs
+      success = await _authService.forceLogoutAndClearAllData();
+    } catch (e) {
+      KneelLogger.error('ProfileCubit.forceLogoutAndClearAllData', e);
+      success = false;
+    }
+
+    // Clear local cubit state
+    clear();
+
+    KneelLogger.log('Profile cubit reset complete', context: 'Profile');
+    return success;
+  }
+
+  /// Retries loading the profile using cached auth data.
+  /// Call this when user taps "Retry Connection" button.
+  Future<void> retryProfileLoad() async {
+    if (_cachedAuthData == null) {
+      KneelLogger.warn('No cached auth data for retry', context: 'Profile');
+      return;
+    }
+
+    final cached = _cachedAuthData!;
+    await loadProfile(
+      uid: cached.uid,
+      email: cached.email,
+      displayName: cached.displayName,
+      photoUrl: cached.photoUrl,
+      provider: cached.provider,
+      phoneNumber: cached.phoneNumber,
+      emailVerified: cached.emailVerified,
+    );
   }
 
   /// Refreshes the profile from Supabase.
@@ -91,17 +304,17 @@ class ProfileCubit extends Cubit<ProfileState> {
     if (_currentUserId == null) return;
 
     try {
-      final profile = await _profileService.getProfile(_currentUserId!);
+      final profile = await _profileService.getProfile(_currentUserId!).timeout(_profileTimeout);
       if (profile != null) {
         if (profile.needsOnboarding) {
           emit(ProfileNeedsOnboarding(profile));
         } else {
           emit(ProfileLoaded(profile));
         }
-        DebugLogger.log('Profile refreshed for: $_currentUserId');
+        KneelLogger.log('Profile refreshed for: $_currentUserId', context: 'Profile');
       }
     } catch (e) {
-      DebugLogger.error('ProfileCubit.refreshProfile', e);
+      KneelLogger.error('ProfileCubit.refreshProfile', e);
     }
   }
 
@@ -122,13 +335,13 @@ class ProfileCubit extends Cubit<ProfileState> {
         // Update Supabase profile
         final updatedProfile = await _profileService.markEmailVerified(_currentUserId!);
         emit(ProfileLoaded(updatedProfile));
-        DebugLogger.log('Email verification synced to Supabase');
+        KneelLogger.log('Email verification synced to Supabase', context: 'Profile');
         return true;
       }
 
       return false;
     } catch (e) {
-      DebugLogger.error('ProfileCubit.syncEmailVerificationStatus', e);
+      KneelLogger.error('ProfileCubit.syncEmailVerificationStatus', e);
       return false;
     }
   }
@@ -147,10 +360,10 @@ class ProfileCubit extends Cubit<ProfileState> {
       }
 
       await firebaseUser.sendEmailVerification();
-      DebugLogger.log('Verification email sent');
+      KneelLogger.log('Verification email sent', context: 'Profile');
       return true;
     } catch (e) {
-      DebugLogger.error('ProfileCubit.resendEmailVerification', e);
+      KneelLogger.error('ProfileCubit.resendEmailVerification', e);
       rethrow;
     }
   }
@@ -169,13 +382,17 @@ class ProfileCubit extends Cubit<ProfileState> {
         }
       },
       onError: (e) {
-        DebugLogger.error('ProfileCubit.watchProfile', e);
+        KneelLogger.error('ProfileCubit.watchProfile', e);
       },
     );
   }
 
-  /// Completes the onboarding process.
+  /// Completes the onboarding process (ATOMIC).
+  ///
   /// Performs an upsert on the profiles table with bio, location, and display name.
+  /// Validates data BEFORE and AFTER the upsert to ensure atomicity.
+  ///
+  /// If the Supabase upsert fails, the user will NOT proceed to Home.
   Future<void> completeOnboarding({
     required String displayName,
     required String bio,
@@ -197,28 +414,62 @@ class ProfileCubit extends Cubit<ProfileState> {
       return;
     }
 
+    // PRE-VALIDATION: Validate input data before attempting upsert
+    if (displayName.trim().isEmpty) {
+      emit(const ProfileError('Display name is required'));
+      emit(ProfileNeedsOnboarding(currentProfile));
+      return;
+    }
+    if (locationCity.trim().isEmpty || googlePlaceId.trim().isEmpty) {
+      emit(const ProfileError('Location is required'));
+      emit(ProfileNeedsOnboarding(currentProfile));
+      return;
+    }
+
     emit(ProfileUpdating(currentProfile));
 
     try {
-      // Use upsert to ensure all data is saved atomically
+      // ATOMIC UPSERT: Ensure all data is saved atomically
       final updatedProfile = await _profileService.upsertProfile(
         uid: _currentUserId!,
         email: currentProfile.email,
-        displayName: displayName,
+        displayName: displayName.trim(),
         photoUrl: photoUrl ?? currentProfile.photoUrl,
         provider: currentProfile.provider,
         phoneNumber: currentProfile.phoneNumber,
-        bio: bio,
-        locationCity: locationCity,
-        googlePlaceId: googlePlaceId,
+        bio: bio.trim(),
+        locationCity: locationCity.trim(),
+        googlePlaceId: googlePlaceId.trim(),
         emailVerified: currentProfile.emailVerified,
-      );
+      ).timeout(_profileTimeout);
 
-      DebugLogger.log('Onboarding completed for: $_currentUserId');
+      // POST-VALIDATION: Verify the profile is complete before navigating
+      final validationError = updatedProfile.validateForOnboarding();
+      if (validationError != null) {
+        KneelLogger.error('ProfileCubit.completeOnboarding', 'Post-validation failed: $validationError');
+        emit(ProfileError('Failed to save profile: $validationError'));
+        emit(ProfileNeedsOnboarding(currentProfile));
+        return;
+      }
+
+      // Final check: Ensure profile is complete
+      if (!updatedProfile.isProfileComplete) {
+        KneelLogger.error('ProfileCubit.completeOnboarding', 'Profile not complete after upsert');
+        emit(const ProfileError('Profile data incomplete. Please try again.'));
+        emit(ProfileNeedsOnboarding(currentProfile));
+        return;
+      }
+
+      KneelLogger.log('Onboarding completed for: $_currentUserId', context: 'Profile');
       emit(ProfileLoaded(updatedProfile));
+    } on TimeoutException {
+      KneelLogger.error('ProfileCubit.completeOnboarding', 'Timeout during onboarding');
+      emit(const ProfileError('Connection timed out. Please try again.'));
+      emit(ProfileNeedsOnboarding(currentProfile));
     } catch (e) {
-      DebugLogger.error('ProfileCubit.completeOnboarding', e);
+      KneelLogger.error('ProfileCubit.completeOnboarding', e);
       emit(ProfileError(e.toString()));
+      // CRITICAL: Do NOT proceed to Home on failure - stay on onboarding
       emit(ProfileNeedsOnboarding(currentProfile));
     }
   }
@@ -270,10 +521,10 @@ class ProfileCubit extends Cubit<ProfileState> {
     emit(ProfileUpdating(currentProfile));
 
     try {
-      final updatedProfile = await updateFn();
+      final updatedProfile = await updateFn().timeout(_profileTimeout);
       emit(ProfileLoaded(updatedProfile));
     } catch (e) {
-      DebugLogger.error('ProfileCubit.updateField', e);
+      KneelLogger.error('ProfileCubit.updateField', e);
       emit(ProfileError(e.toString()));
       emit(ProfileLoaded(currentProfile));
     }
@@ -290,6 +541,66 @@ class ProfileCubit extends Cubit<ProfileState> {
 
   /// Gets the current user ID.
   String? get currentUserId => _currentUserId;
+
+  /// Checks if an error is network-related
+  bool _isNetworkError(dynamic error) {
+    final errorStr = error.toString().toLowerCase();
+    return errorStr.contains('socket') ||
+        errorStr.contains('network') ||
+        errorStr.contains('connection') ||
+        errorStr.contains('host lookup') ||
+        errorStr.contains('unreachable');
+  }
+
+  /// Checks if an error is auth/permission related (might indicate deleted user)
+  bool _isAuthError(dynamic error) {
+    final errorStr = error.toString().toLowerCase();
+    return errorStr.contains('user-not-found') ||
+        errorStr.contains('user not found') ||
+        errorStr.contains('unauthorized') ||
+        errorStr.contains('permission denied') ||
+        errorStr.contains('unauthenticated');
+  }
+
+  /// Checks if an error is RLS (Row Level Security) related
+  bool _isRLSError(dynamic error) {
+    final errorStr = error.toString().toLowerCase();
+    return errorStr.contains('rls') ||
+        errorStr.contains('row-level security') ||
+        errorStr.contains('42501') || // PostgreSQL permission denied
+        errorStr.contains('policy');
+  }
+
+  /// Checks if a PostgrestException indicates user not found or unauthorized.
+  /// This is the primary trigger for production self-healing.
+  bool _isPostgrestUserNotFoundError(dynamic error) {
+    if (error is PostgrestException) {
+      final code = error.code?.toLowerCase() ?? '';
+      final message = error.message.toLowerCase();
+
+      // Check for common "user not found" patterns
+      final isUserNotFound = message.contains('user not found') ||
+          message.contains('no rows') ||
+          message.contains('not found') ||
+          code == 'pgrst116'; // PostgREST: No rows returned
+
+      // Check for unauthorized/permission errors
+      final isUnauthorized = message.contains('unauthorized') ||
+          message.contains('permission denied') ||
+          message.contains('jwt') ||
+          code == '42501' || // PostgreSQL permission denied
+          code == 'pgrst301'; // PostgREST: JWT error
+
+      if (isUserNotFound || isUnauthorized) {
+        KneelLogger.warn(
+          'PostgrestException detected: code=$code, message=${error.message}',
+          context: 'Profile',
+        );
+        return true;
+      }
+    }
+    return false;
+  }
 
   // ============================================================================
   // PHOTO UPLOAD
@@ -377,7 +688,7 @@ class ProfileCubit extends Cubit<ProfileState> {
         throw Exception('Failed to compress image');
       }
 
-      DebugLogger.log('Compressed image size: ${compressedBytes.length} bytes');
+      KneelLogger.log('Compressed image size: ${compressedBytes.length} bytes', context: 'Profile');
 
       // Step 4: Upload to Supabase Storage
       final photoUrl = await _profileService.uploadProfilePhoto(
@@ -397,10 +708,10 @@ class ProfileCubit extends Cubit<ProfileState> {
         emit(ProfileLoaded(updatedProfile));
       }
 
-      DebugLogger.log('Profile photo updated successfully');
+      KneelLogger.log('Profile photo updated successfully', context: 'Profile');
       return photoUrl;
     } catch (e) {
-      DebugLogger.error('ProfileCubit.uploadProfilePhoto', e);
+      KneelLogger.error('ProfileCubit.uploadProfilePhoto', e);
       // Restore previous state
       if (currentProfile != null) {
         if (currentProfile.needsOnboarding) {
@@ -434,20 +745,20 @@ class ProfileCubit extends Cubit<ProfileState> {
     try {
       // Step 1: Delete storage files (avatars folder)
       await _profileService.deleteUserStorageFiles(_currentUserId!);
-      DebugLogger.log('Deleted storage files for: $_currentUserId');
+      KneelLogger.log('Deleted storage files for: $_currentUserId', context: 'Profile');
 
       // Step 2: Delete profile from Supabase
       await _profileService.deleteProfile(_currentUserId!);
-      DebugLogger.log('Deleted Supabase profile for: $_currentUserId');
+      KneelLogger.log('Deleted Supabase profile for: $_currentUserId', context: 'Profile');
 
       // Step 3: Delete Firebase Auth user
       await firebaseUser.delete();
-      DebugLogger.log('Deleted Firebase user: ${firebaseUser.uid}');
+      KneelLogger.log('Deleted Firebase user: ${firebaseUser.uid}', context: 'Profile');
 
       // Clear local state
       clear();
     } catch (e) {
-      DebugLogger.error('ProfileCubit.deleteAccount', e);
+      KneelLogger.error('ProfileCubit.deleteAccount', e);
       rethrow;
     }
   }
@@ -456,6 +767,8 @@ class ProfileCubit extends Cubit<ProfileState> {
   void clear() {
     _profileSubscription?.cancel();
     _currentUserId = null;
+    _cachedAuthData = null;
+    _creationRetryCount = 0;
     emit(const ProfileInitial());
   }
 
@@ -464,4 +777,25 @@ class ProfileCubit extends Cubit<ProfileState> {
     _profileSubscription?.cancel();
     return super.close();
   }
+}
+
+/// Internal class to cache auth data for retry functionality
+class _CachedAuthData {
+  final String uid;
+  final String email;
+  final String? displayName;
+  final String? photoUrl;
+  final String? provider;
+  final String? phoneNumber;
+  final bool? emailVerified;
+
+  _CachedAuthData({
+    required this.uid,
+    required this.email,
+    this.displayName,
+    this.photoUrl,
+    this.provider,
+    this.phoneNumber,
+    this.emailVerified,
+  });
 }

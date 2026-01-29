@@ -58,3 +58,33 @@ class ProfileUpdating extends ProfileState {
   @override
   List<Object?> get props => [currentProfile];
 }
+
+/// State when profile connection fails (timeout/network error).
+/// Allows user to retry without full re-authentication.
+class ProfileConnectionError extends ProfileState {
+  final String message;
+  final String? userId;
+
+  const ProfileConnectionError({
+    required this.message,
+    this.userId,
+  });
+
+  @override
+  List<Object?> get props => [message, userId];
+}
+
+/// State when profile is not found in database (user deleted from backend).
+/// This triggers a force logout to clear zombie sessions.
+class ProfileNotFound extends ProfileState {
+  final String userId;
+  final String message;
+
+  const ProfileNotFound({
+    required this.userId,
+    this.message = 'Your account was not found. Please sign in again.',
+  });
+
+  @override
+  List<Object?> get props => [userId, message];
+}

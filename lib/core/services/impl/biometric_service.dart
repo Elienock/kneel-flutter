@@ -1,7 +1,7 @@
 import 'package:injectable/injectable.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:quick_church/core/services/interfaces/i_biometric_service.dart';
-import 'package:quick_church/core/utils/debug_logger.dart';
+import 'package:quick_church/core/utils/kneel_logger.dart';
 
 /// Implementation of [IBiometricService] using local_auth package.
 @LazySingleton(as: IBiometricService)
@@ -15,7 +15,7 @@ class BiometricService implements IBiometricService {
       final canAuthenticate = canAuthenticateWithBiometrics || await _localAuth.isDeviceSupported();
       return canAuthenticate;
     } catch (e) {
-      DebugLogger.error('BiometricService.isAvailable', e);
+      KneelLogger.error('BiometricService.isAvailable', e);
       return false;
     }
   }
@@ -26,7 +26,7 @@ class BiometricService implements IBiometricService {
       final availableBiometrics = await _localAuth.getAvailableBiometrics();
       return availableBiometrics.isNotEmpty;
     } catch (e) {
-      DebugLogger.error('BiometricService.hasEnrolledBiometrics', e);
+      KneelLogger.error('BiometricService.hasEnrolledBiometrics', e);
       return false;
     }
   }
@@ -36,7 +36,7 @@ class BiometricService implements IBiometricService {
     try {
       final isAvail = await isAvailable();
       if (!isAvail) {
-        DebugLogger.log('Biometric authentication not available');
+        KneelLogger.log('Biometric authentication not available');
         return false;
       }
 
@@ -48,10 +48,10 @@ class BiometricService implements IBiometricService {
         ),
       );
 
-      DebugLogger.log('Biometric authentication result: $authenticated');
+      KneelLogger.log('Biometric authentication result: $authenticated');
       return authenticated;
     } catch (e) {
-      DebugLogger.error('BiometricService.authenticate', e);
+      KneelLogger.error('BiometricService.authenticate', e);
       return false;
     }
   }

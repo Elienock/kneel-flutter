@@ -74,8 +74,10 @@ extension GetItInjectableX on _i174.GetIt {
         () => _i320.SupabaseProfileService());
     gh.lazySingleton<_i615.INotificationService>(
         () => _i974.MockNotificationService());
-    gh.factory<_i817.ProfileCubit>(
-        () => _i817.ProfileCubit(gh<_i630.IProfileService>()));
+    gh.factory<_i817.ProfileCubit>(() => _i817.ProfileCubit(
+          gh<_i630.IProfileService>(),
+          gh<_i812.IAuthService>(),
+        ));
     await gh.lazySingletonAsync<_i986.Box<_i797.SermonNoteModel>>(
       () => registerModule.sermonBox,
       instanceName: 'sermonBox',

@@ -276,6 +276,14 @@ class _OnboardingPageState extends State<OnboardingPage> {
   }
 
   Future<void> _searchPlaces(String query) async {
+    // Clear selection when user starts typing again
+    if (_selectedLocationCity != null) {
+      setState(() {
+        _selectedLocationCity = null;
+        _selectedPlaceId = null;
+      });
+    }
+
     if (query.trim().isEmpty) {
       setState(() {
         _predictions = [];
@@ -284,13 +292,21 @@ class _OnboardingPageState extends State<OnboardingPage> {
       return;
     }
 
+    // Only search if query has at least 2 characters
+    if (query.trim().length < 2) {
+      return;
+    }
+
     setState(() => _isSearching = true);
 
     try {
+      debugPrint('[Onboarding] Searching for: "$query"');
       final results = await _placesService.searchPlaces(
         query: query,
         locationBias: _locationBias,
       );
+      debugPrint('[Onboarding] Got ${results.length} results');
+
       if (mounted) {
         setState(() {
           _predictions = results;
@@ -298,11 +314,20 @@ class _OnboardingPageState extends State<OnboardingPage> {
         });
       }
     } catch (e) {
+      debugPrint('[Onboarding] Search error: $e');
       if (mounted) {
         setState(() {
           _predictions = [];
           _isSearching = false;
         });
+        // Show error snackbar for debugging
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Search failed: ${e.toString().split('\n').first}'),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     }
   }
@@ -356,7 +381,10 @@ class _OnboardingPageState extends State<OnboardingPage> {
           );
         }
       },
-      child: Scaffold(
+      // PopScope prevents back button from popping to login while authenticated
+      child: PopScope(
+        canPop: false,
+        child: Scaffold(
         backgroundColor: isDark ? AppTheme.darkBackground : AppTheme.lightBackground,
         body: SafeArea(
           child: Column(
@@ -383,6 +411,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
           ),
         ),
       ),
+    ),  // PopScope
     );
   }
 
@@ -802,7 +831,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
   Widget _buildLocationStep(bool isDark) {
     return FadeInRight(
       duration: const Duration(milliseconds: 500),
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 24),
         child: Column(
           children: [
@@ -887,7 +916,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
               ),
             ),
 
-            // Search results
+            // Search results or "No results" message
             if (_predictions.isNotEmpty)
               Container(
                 margin: const EdgeInsets.only(top: 8),
@@ -946,6 +975,39 @@ class _OnboardingPageState extends State<OnboardingPage> {
                 ),
               ),
 
+            // No results message (only show if searched and no results)
+            if (_predictions.isEmpty &&
+                !_isSearching &&
+                _locationController.text.trim().length >= 2 &&
+                _selectedLocationCity == null)
+              Container(
+                margin: const EdgeInsets.only(top: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      LucideIcons.searchX,
+                      size: 18,
+                      color: isDark ? Colors.white38 : Colors.black38,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'No cities found. Try a different search.',
+                        style: GoogleFonts.inter(
+                          fontSize: 13,
+                          color: isDark ? Colors.white54 : Colors.black54,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
             // Selected location confirmation
             if (_selectedLocationCity != null && _predictions.isEmpty) ...[
               const SizedBox(height: 16),
@@ -987,7 +1049,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
               ),
             ],
 
-            const Spacer(),
+            const SizedBox(height: 32),
 
             // Powered by Google attribution
             FadeIn(
@@ -1020,6 +1082,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                 ),
               ),
             ),
+            const SizedBox(height: 24),
           ],
         ),
       ),

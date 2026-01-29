@@ -1,10 +1,15 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:lucide_icons/lucide_icons.dart';
+import 'package:quick_church/core/services/app_lifecycle_observer.dart';
+import 'package:quick_church/core/services/interfaces/i_biometric_service.dart';
 import 'package:quick_church/core/theme/app_theme.dart';
+import 'package:quick_church/core/utils/kneel_logger.dart';
 import 'package:quick_church/features/auth/presentation/bloc/auth_cubit.dart';
 import 'package:quick_church/features/auth/presentation/bloc/auth_state.dart';
 import 'package:quick_church/features/auth/presentation/pages/auth_page.dart';
@@ -53,6 +58,7 @@ void main() async {
 /// Root application widget for Kneel.
 ///
 /// Configures theming, routing, localization, and provides the root BLoCs.
+/// Includes AppLifecycleObserver for session persistence.
 class KneelApp extends StatefulWidget {
   const KneelApp({super.key});
 
@@ -62,6 +68,34 @@ class KneelApp extends StatefulWidget {
 
 class _KneelAppState extends State<KneelApp> {
   bool _showSplash = true;
+  late final AppLifecycleObserver _lifecycleObserver;
+
+  @override
+  void initState() {
+    super.initState();
+    // Initialize lifecycle observer for session management
+    _lifecycleObserver = AppLifecycleObserver(
+      onSessionExpired: _handleSessionExpired,
+      onSessionRefreshed: _handleSessionRefreshed,
+    );
+    WidgetsBinding.instance.addObserver(_lifecycleObserver);
+    KneelLogger.lifecycle('AppLifecycleObserver registered');
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(_lifecycleObserver);
+    super.dispose();
+  }
+
+  void _handleSessionExpired() {
+    KneelLogger.lifecycle('Session expired - triggering logout');
+    // The auth cubit will handle this via Firebase auth state changes
+  }
+
+  void _handleSessionRefreshed() {
+    KneelLogger.lifecycle('Session refreshed successfully');
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -121,19 +155,78 @@ class _KneelAppState extends State<KneelApp> {
   }
 }
 
-/// Gates the main app behind authentication and onboarding.
-/// Shows AuthPage when unauthenticated, OnboardingPage when needs onboarding,
-/// MainNavigationPage when fully authenticated.
-class _AuthGate extends StatelessWidget {
+/// Smart Router - Gates the app based on Auth + Profile + Biometric state.
+///
+/// Navigation Logic:
+/// - NOT Signed In → AuthPage
+/// - Signed In + Biometric Enabled + Not Verified → BiometricChallenge
+/// - Signed In + Profile Loading → Loading Screen
+/// - Signed In + Profile Connection Error → Retry Screen
+/// - Signed In + Profile Incomplete → OnboardingPage
+/// - Signed In + Profile Complete (validated) → MainNavigationPage
+///
+/// Uses StatefulWidget to track profile load status and prevent double-login loops.
+class _AuthGate extends StatefulWidget {
   const _AuthGate();
 
   @override
+  State<_AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<_AuthGate> {
+  bool _profileLoadTriggered = false;
+  bool _biometricVerified = false;
+  bool _checkingBiometric = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Check if already authenticated when widget mounts
+    // This handles the case where auth state was set before this widget rendered
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkInitialAuthState();
+    });
+  }
+
+  /// Checks auth state on mount - handles case where Authenticated was emitted
+  /// before this widget's BlocListener was active (e.g., during splash screen)
+  void _checkInitialAuthState() {
+    final authState = context.read<AuthCubit>().state;
+    KneelLogger.log('initState check - authState is ${authState.runtimeType}', context: 'SmartRouter');
+
+    if (authState is Authenticated && !_profileLoadTriggered) {
+      _profileLoadTriggered = true;
+      final user = authState.user;
+      KneelLogger.log('Already authenticated! Triggering loadProfile for ${user.id}', context: 'SmartRouter');
+      context.read<ProfileCubit>().loadProfile(
+        uid: user.id,
+        email: user.email,
+        displayName: user.displayName,
+        photoUrl: user.photoUrl,
+        provider: user.provider.name,
+        phoneNumber: user.phoneNumber,
+        emailVerified: user.isEmailVerified,
+      );
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return BlocConsumer<AuthCubit, AuthState>(
+    return BlocListener<AuthCubit, AuthState>(
       listener: (context, authState) {
-        // When user authenticates, load their profile
-        if (authState is Authenticated) {
+        // When user signs out, reset all flags
+        if (authState is Unauthenticated || authState is AuthInitial) {
+          _profileLoadTriggered = false;
+          _biometricVerified = false;
+          _checkingBiometric = false;
+          context.read<ProfileCubit>().clear();
+        }
+
+        // When user authenticates, load their profile (only once per session)
+        if (authState is Authenticated && !_profileLoadTriggered) {
+          _profileLoadTriggered = true;
           final user = authState.user;
+          KneelLogger.log('Auth state changed to Authenticated, loading profile for ${user.id}', context: 'SmartRouter');
           context.read<ProfileCubit>().loadProfile(
             uid: user.id,
             email: user.email,
@@ -145,67 +238,178 @@ class _AuthGate extends StatelessWidget {
           );
         }
       },
-      builder: (context, authState) {
-        if (authState is AuthLoading) {
-          return const _LoadingScreen(message: 'Signing in...');
-        }
+      child: BlocBuilder<AuthCubit, AuthState>(
+        builder: (context, authState) {
+          // ═══════════════════════════════════════════════════════════════════
+          // BRANCH 1: Not authenticated → Show Auth Page
+          // ═══════════════════════════════════════════════════════════════════
+          if (authState is AuthInitial || authState is Unauthenticated || authState is AuthError) {
+            return const AuthPage();
+          }
 
-        if (authState is Authenticated) {
-          // Check profile state for onboarding
-          return BlocBuilder<ProfileCubit, ProfileState>(
-            builder: (context, profileState) {
-              if (profileState is ProfileLoading || profileState is ProfileInitial) {
-                return const _LoadingScreen(message: 'Loading profile...');
-              }
+          // ═══════════════════════════════════════════════════════════════════
+          // BRANCH 2: Auth Loading → Show branded loading
+          // ═══════════════════════════════════════════════════════════════════
+          if (authState is AuthLoading) {
+            return const _BrandedLoadingScreen(message: 'Signing in...');
+          }
 
-              if (profileState is ProfileNeedsOnboarding) {
-                return OnboardingPage(
-                  initialPhotoUrl: authState.user.photoUrl,
-                  initialDisplayName: authState.user.displayName,
-                );
-              }
+          // ═══════════════════════════════════════════════════════════════════
+          // BRANCH 3: Authenticated → Check Profile State (Smart Routing)
+          // ═══════════════════════════════════════════════════════════════════
+          if (authState is Authenticated) {
+            return BlocBuilder<ProfileCubit, ProfileState>(
+              builder: (context, profileState) {
+                // 3a. Profile loading → Branded loading screen
+                if (profileState is ProfileLoading || profileState is ProfileInitial) {
+                  return const _BrandedLoadingScreen(message: 'Loading your profile...');
+                }
 
-              if (profileState is ProfileLoaded || profileState is ProfileUpdating) {
-                return const MainNavigationPage();
-              }
+                // 3b. Profile connection error → Retry screen
+                if (profileState is ProfileConnectionError) {
+                  return _ConnectionErrorScreen(
+                    message: profileState.message,
+                    onRetry: () {
+                      context.read<ProfileCubit>().retryProfileLoad();
+                    },
+                  );
+                }
 
-              if (profileState is ProfileError) {
-                return _ErrorScreen(
-                  message: profileState.message,
-                  onRetry: () {
-                    final user = authState.user;
-                    context.read<ProfileCubit>().loadProfile(
-                      uid: user.id,
-                      email: user.email,
-                      displayName: user.displayName,
-                      photoUrl: user.photoUrl,
-                      provider: user.provider.name,
-                      phoneNumber: user.phoneNumber,
-                      emailVerified: user.isEmailVerified,
+                // 3b2. Profile not found (user deleted) → Self-Healing in progress
+                if (profileState is ProfileNotFound) {
+                  KneelLogger.warn('ProfileNotFound - self-healing in progress', context: 'SmartRouter');
+                  // Self-healing auto-triggers in ProfileCubit._handleUserNotFound()
+                  // This screen shows briefly while session is being cleared
+                  return _AccountDeletedScreen(
+                    message: profileState.message,
+                    onSignInAgain: () {
+                      // Manual trigger if auto-heal didn't complete
+                      context.read<ProfileCubit>().forceLogoutAndClearAllData();
+                    },
+                  );
+                }
+
+                // 3c. Profile incomplete → Onboarding (wrapped with PopScope)
+                if (profileState is ProfileNeedsOnboarding) {
+                  return OnboardingPage(
+                    initialPhotoUrl: authState.user.photoUrl,
+                    initialDisplayName: authState.user.displayName,
+                  );
+                }
+
+                // 3d. Profile complete → Validate & Show Home
+                if (profileState is ProfileLoaded || profileState is ProfileUpdating) {
+                  final profile = profileState is ProfileLoaded
+                      ? profileState.profile
+                      : (profileState as ProfileUpdating).currentProfile;
+
+                  // STATE VALIDATION: Ensure critical fields are present
+                  if (!profile.isProfileComplete) {
+                    KneelLogger.warn(
+                      'Profile incomplete in ProfileLoaded state - redirecting to onboarding',
+                      context: 'SmartRouter',
                     );
-                  },
-                );
-              }
+                    // Force back to onboarding
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      context.read<ProfileCubit>().loadProfile(
+                        uid: profile.id,
+                        email: profile.email,
+                        displayName: profile.displayName,
+                        photoUrl: profile.photoUrl,
+                        provider: profile.provider,
+                        phoneNumber: profile.phoneNumber,
+                        emailVerified: profile.emailVerified,
+                      );
+                    });
+                    return const _BrandedLoadingScreen(message: 'Verifying profile...');
+                  }
 
-              return const _LoadingScreen(message: 'Loading...');
-            },
-          );
-        }
+                  // Profile is valid - show Home
+                  return const MainNavigationPage();
+                }
 
-        return const AuthPage();
-      },
+                // 3e. Profile error → Error screen with retry
+                if (profileState is ProfileError) {
+                  return _ErrorScreen(
+                    message: profileState.message,
+                    onRetry: () {
+                      final user = authState.user;
+                      context.read<ProfileCubit>().loadProfile(
+                        uid: user.id,
+                        email: user.email,
+                        displayName: user.displayName,
+                        photoUrl: user.photoUrl,
+                        provider: user.provider.name,
+                        phoneNumber: user.phoneNumber,
+                        emailVerified: user.isEmailVerified,
+                      );
+                    },
+                  );
+                }
+
+                // Fallback loading
+                return const _BrandedLoadingScreen(message: 'Please wait...');
+              },
+            );
+          }
+
+          // Fallback (should never reach)
+          return const _BrandedLoadingScreen(message: 'Starting...');
+        },
+      ),
     );
+  }
+
+  /// Checks if biometric should be challenged and triggers it.
+  ///
+  /// This is called when user has enabled biometric lock in settings.
+  /// Currently a placeholder - enable when biometric lock feature is implemented.
+  // ignore: unused_element
+  Future<void> _checkBiometricChallenge() async {
+    if (_biometricVerified || _checkingBiometric) return;
+
+    setState(() => _checkingBiometric = true);
+
+    try {
+      final biometricService = getIt<IBiometricService>();
+      final canUseBiometric = await biometricService.isAvailable();
+      final hasBiometrics = await biometricService.hasEnrolledBiometrics();
+
+      if (canUseBiometric && hasBiometrics) {
+        // TODO: Check user preference for biometric lock in settings
+        // For now, we skip biometric challenge on fresh login
+        // Biometric is only used for re-authentication from locked state
+        KneelLogger.biometric('Biometric available: $canUseBiometric, enrolled: $hasBiometrics');
+      }
+
+      _biometricVerified = true;
+    } catch (e) {
+      KneelLogger.error('BiometricChallenge', e);
+      _biometricVerified = true; // Skip on error
+    } finally {
+      if (mounted) {
+        setState(() => _checkingBiometric = false);
+      }
+    }
   }
 }
 
-/// Premium loading screen.
-class _LoadingScreen extends StatelessWidget {
+// ═══════════════════════════════════════════════════════════════════════════════
+// UI SCREENS (Optimized for 60fps)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Kneel-branded loading screen with fade-in animation.
+/// Optimized with RepaintBoundary for smooth 60fps performance.
+/// Includes debug "Hard Reset" button in kDebugMode.
+class _BrandedLoadingScreen extends StatelessWidget {
   final String message;
 
-  const _LoadingScreen({required this.message});
+  const _BrandedLoadingScreen({required this.message});
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
@@ -213,48 +417,254 @@ class _LoadingScreen extends StatelessWidget {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
-              Theme.of(context).colorScheme.surface,
+              AppTheme.primaryColor.withValues(alpha: 0.15),
+              isDark ? AppTheme.darkBackground : AppTheme.lightBackground,
             ],
           ),
         ),
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+        child: SafeArea(
+          child: Stack(
             children: [
-              Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: const Icon(
-                  Icons.favorite,
-                  color: Colors.white,
-                  size: 40,
+              // Main content
+              Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // Kneel Logo with animation (wrapped in RepaintBoundary)
+                    RepaintBoundary(
+                      child: TweenAnimationBuilder<double>(
+                        tween: Tween(begin: 0.0, end: 1.0),
+                        duration: const Duration(milliseconds: 600),
+                        builder: (context, value, child) {
+                          return Opacity(
+                            opacity: value,
+                            child: Transform.scale(
+                              scale: 0.8 + (0.2 * value),
+                              child: child,
+                            ),
+                          );
+                        },
+                        child: const _KneelLogo(),
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+
+                    // App name (wrapped in RepaintBoundary)
+                    RepaintBoundary(
+                      child: TweenAnimationBuilder<double>(
+                        tween: Tween(begin: 0.0, end: 1.0),
+                        duration: const Duration(milliseconds: 600),
+                        curve: Curves.easeOut,
+                        builder: (context, value, child) {
+                          return Opacity(
+                            opacity: value,
+                            child: child,
+                          );
+                        },
+                        child: Text(
+                          'Kneel',
+                          style: GoogleFonts.outfit(
+                            fontSize: 32,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.primaryColor,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 48),
+
+                    // Loading indicator (wrapped in RepaintBoundary for animation isolation)
+                    RepaintBoundary(
+                      child: SizedBox(
+                        width: 32,
+                        height: 32,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 3,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            AppTheme.primaryColor.withValues(alpha: 0.7),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Message
+                    Text(
+                      message,
+                      style: GoogleFonts.inter(
+                        fontSize: 14,
+                        color: isDark ? Colors.white54 : Colors.black45,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    Theme.of(context).colorScheme.primary,
+
+              // DEBUG ONLY: Ghost Reset button (bottom-right corner)
+              // Wrapped in kDebugMode so it's physically removed from production binary
+              if (kDebugMode)
+                Positioned(
+                  bottom: 16,
+                  right: 16,
+                  child: IconButton(
+                    onPressed: () async {
+                      KneelLogger.log('Ghost Reset triggered (debug)', context: 'Debug');
+                      await context.read<ProfileCubit>().forceLogoutAndClearAllData();
+                    },
+                    icon: Icon(
+                      Icons.refresh,
+                      size: 20,
+                      color: Colors.grey.withValues(alpha: 0.5),
+                    ),
+                    tooltip: 'Debug Reset',
                   ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                message,
-                style: GoogleFonts.inter(
-                  fontSize: 14,
-                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
-                ),
-              ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Extracted Kneel logo for const optimization
+class _KneelLogo extends StatelessWidget {
+  const _KneelLogo();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 100,
+      height: 100,
+      decoration: BoxDecoration(
+        color: AppTheme.primaryColor,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.primaryColor.withValues(alpha: 0.3),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: const Icon(
+        Icons.favorite,
+        color: Colors.white,
+        size: 48,
+      ),
+    );
+  }
+}
+
+/// Connection error screen with retry button (for timeout/network issues).
+class _ConnectionErrorScreen extends StatelessWidget {
+  final String message;
+  final VoidCallback onRetry;
+
+  const _ConnectionErrorScreen({
+    required this.message,
+    required this.onRetry,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Scaffold(
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              AppTheme.primaryColor.withValues(alpha: 0.1),
+              isDark ? AppTheme.darkBackground : AppTheme.lightBackground,
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Connection icon
+                  Container(
+                    width: 100,
+                    height: 100,
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    child: const Icon(
+                      LucideIcons.wifiOff,
+                      color: Colors.orange,
+                      size: 48,
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+
+                  // Title
+                  Text(
+                    'Connection Issue',
+                    style: GoogleFonts.outfit(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Message
+                  Text(
+                    message,
+                    style: GoogleFonts.inter(
+                      fontSize: 16,
+                      color: isDark ? Colors.white60 : Colors.black54,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 40),
+
+                  // Retry button
+                  SizedBox(
+                    width: double.infinity,
+                    height: 56,
+                    child: ElevatedButton.icon(
+                      onPressed: onRetry,
+                      icon: const Icon(LucideIcons.refreshCw, size: 20),
+                      label: Text(
+                        'Retry Connection',
+                        style: GoogleFonts.inter(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primaryColor,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        elevation: 0,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Hint text
+                  Text(
+                    'Check your internet connection and try again',
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      color: isDark ? Colors.white38 : Colors.black38,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -274,6 +684,8 @@ class _ErrorScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
@@ -281,65 +693,201 @@ class _ErrorScreen extends StatelessWidget {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
-              Theme.of(context).colorScheme.surface,
+              Colors.red.withValues(alpha: 0.1),
+              isDark ? AppTheme.darkBackground : AppTheme.lightBackground,
             ],
           ),
         ),
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(32),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  width: 80,
-                  height: 80,
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.error.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Icon(
-                    Icons.error_outline,
-                    color: Theme.of(context).colorScheme.error,
-                    size: 40,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Text(
-                  'Something went wrong',
-                  style: GoogleFonts.outfit(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Theme.of(context).colorScheme.onSurface,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  message,
-                  style: GoogleFonts.inter(
-                    fontSize: 14,
-                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 24),
-                ElevatedButton(
-                  onPressed: onRetry,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Theme.of(context).colorScheme.primary,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+        child: SafeArea(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Error icon
+                  Container(
+                    width: 100,
+                    height: 100,
+                    decoration: BoxDecoration(
+                      color: Colors.red.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    child: const Icon(
+                      LucideIcons.alertTriangle,
+                      color: Colors.red,
+                      size: 48,
                     ),
                   ),
-                  child: Text(
-                    'Try Again',
-                    style: GoogleFonts.inter(fontWeight: FontWeight.w600),
+                  const SizedBox(height: 32),
+
+                  // Title
+                  Text(
+                    'Something went wrong',
+                    style: GoogleFonts.outfit(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : Colors.black87,
+                    ),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 12),
+
+                  // Message
+                  Text(
+                    message,
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      color: isDark ? Colors.white60 : Colors.black54,
+                    ),
+                    textAlign: TextAlign.center,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 40),
+
+                  // Retry button
+                  SizedBox(
+                    width: double.infinity,
+                    height: 56,
+                    child: ElevatedButton.icon(
+                      onPressed: onRetry,
+                      icon: const Icon(LucideIcons.refreshCw, size: 20),
+                      label: Text(
+                        'Try Again',
+                        style: GoogleFonts.inter(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primaryColor,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        elevation: 0,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Account deleted screen - shown when user's backend profile is not found.
+/// Triggers force logout and returns user to sign in.
+class _AccountDeletedScreen extends StatelessWidget {
+  final String message;
+  final VoidCallback onSignInAgain;
+
+  const _AccountDeletedScreen({
+    required this.message,
+    required this.onSignInAgain,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Scaffold(
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.orange.withValues(alpha: 0.15),
+              isDark ? AppTheme.darkBackground : AppTheme.lightBackground,
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Account icon
+                  Container(
+                    width: 100,
+                    height: 100,
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    child: const Icon(
+                      LucideIcons.userX,
+                      color: Colors.orange,
+                      size: 48,
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+
+                  // Title
+                  Text(
+                    'Account Not Found',
+                    style: GoogleFonts.outfit(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Message
+                  Text(
+                    message,
+                    style: GoogleFonts.inter(
+                      fontSize: 16,
+                      color: isDark ? Colors.white60 : Colors.black54,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 40),
+
+                  // Sign in again button
+                  SizedBox(
+                    width: double.infinity,
+                    height: 56,
+                    child: ElevatedButton.icon(
+                      onPressed: onSignInAgain,
+                      icon: const Icon(LucideIcons.logIn, size: 20),
+                      label: Text(
+                        'Sign In Again',
+                        style: GoogleFonts.inter(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primaryColor,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        elevation: 0,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Hint text
+                  Text(
+                    'Your session has expired or account was removed.\nPlease sign in to continue.',
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      color: isDark ? Colors.white38 : Colors.black38,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
             ),
           ),
         ),

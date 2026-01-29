@@ -1,35 +1,37 @@
-import 'package:flutter/foundation.dart';
+import 'package:quick_church/core/utils/kneel_logger.dart';
 
-/// Debug logger for verifying backend connections.
-/// Only prints in debug mode.
+/// Debug logger for backward compatibility.
+/// @deprecated Use [KneelLogger] instead for new code.
+///
+/// This class redirects all calls to KneelLogger.
 class DebugLogger {
+  /// Generic log message
   static void log(String message) {
-    if (kDebugMode) {
-      debugPrint('[Kneel] $message');
-    }
+    KneelLogger.log(message);
   }
 
+  /// Firebase initialization log
   static void firebaseInitialized() {
-    log('Firebase Initialized');
+    KneelLogger.firebaseInitialized();
   }
 
+  /// Supabase connection log
   static void supabaseConnected() {
-    log('Supabase Connected');
+    KneelLogger.supabaseConnected();
   }
 
+  /// Auth state change log
   static void authStateChanged(String? userId) {
-    if (userId != null) {
-      log('Auth State: User signed in (UID: $userId)');
-    } else {
-      log('Auth State: User signed out');
-    }
+    KneelLogger.authStateChanged(userId);
   }
 
+  /// Profile sync log
   static void profileSynced(String userId) {
-    log('Profile synced to Supabase for user: $userId');
+    KneelLogger.profileSynced(userId);
   }
 
+  /// Error log
   static void error(String context, dynamic error) {
-    log('ERROR [$context]: $error');
+    KneelLogger.error(context, error);
   }
 }
