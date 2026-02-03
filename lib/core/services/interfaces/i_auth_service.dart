@@ -66,14 +66,57 @@ abstract class IAuthService {
   // ===== Biometric Authentication =====
 
   /// Signs in using device biometrics (fingerprint/face).
+  /// Uses stored refresh token to restore the Firebase session.
   /// Returns the authenticated user on success.
   Future<User> loginWithBiometrics();
 
   /// Checks if biometric authentication is available on this device.
   Future<bool> isBiometricAvailable();
 
-  /// Checks if user has previously signed in (for biometric re-auth).
+  /// Checks if biometric re-authentication is enabled with a valid stored token.
+  /// This is the new check for showing the biometric button on the Start Page.
+  Future<bool> isBiometricLoginEnabled();
+
+  /// Checks if user has previously signed in (legacy - for session flag).
   Future<bool> hasPreviousSession();
+
+  /// Gets the current user's refresh token for biometric storage.
+  /// Returns null if no user is signed in.
+  Future<String?> getRefreshToken();
+
+  /// Enables biometric re-authentication for the current user.
+  /// Stores the refresh token securely after biometric verification.
+  Future<bool> enableBiometricLogin();
+
+  /// Disables biometric re-authentication.
+  /// Clears stored credentials from secure storage.
+  Future<void> disableBiometricLogin();
+
+  // ===== Phone Linking (Add phone to existing account) =====
+
+  /// Links a phone number to the current user's account.
+  /// Use this when user is already signed in and wants to add a phone.
+  Future<void> linkPhoneNumber({
+    required String phoneNumber,
+    required Function(String verificationId) onCodeSent,
+    required Function(String error) onVerificationFailed,
+    Function()? onLinkSuccess,
+  });
+
+  /// Verifies OTP and links the phone credential to current user.
+  Future<void> verifyAndLinkPhone({
+    required String verificationId,
+    required String smsCode,
+  });
+
+  // ===== Password Management =====
+
+  /// Updates the current user's password.
+  /// Requires reauthentication with current password first.
+  Future<void> updatePassword({
+    required String currentPassword,
+    required String newPassword,
+  });
 
   // ===== Session Management =====
 

@@ -9,8 +9,11 @@ import 'package:quick_church/features/prayer/domain/entities/prayer.dart';
 import 'package:quick_church/features/prayer/presentation/bloc/prayer_cubit.dart';
 import 'package:quick_church/features/prayer/presentation/bloc/prayer_state.dart';
 import 'package:quick_church/features/prayer/presentation/bloc/session_cubit.dart';
+import 'package:quick_church/features/prayer/presentation/widgets/prayer_detail_sheet.dart';
+import 'package:quick_church/features/hall_of_faith/presentation/pages/hall_of_faith_page.dart';
 
-/// Focus tab - distraction-free prayer mode with Sacred Timer.
+/// Prayer Time tab - distraction-free prayer mode with Sacred Timer.
+/// Renamed from Focus page. Now includes Active Prayers and Hall of Faith tabs.
 class FocusPage extends StatefulWidget {
   /// If true, starts immediately with 1-minute quick pray session.
   final bool quickPrayMode;
@@ -21,7 +24,7 @@ class FocusPage extends StatefulWidget {
   State<FocusPage> createState() => _FocusPageState();
 }
 
-class _FocusPageState extends State<FocusPage> {
+class _FocusPageState extends State<FocusPage> with SingleTickerProviderStateMixin {
   int _currentIndex = 0;
   final PageController _pageController = PageController();
   bool _isInFocusMode = false;
@@ -32,9 +35,23 @@ class _FocusPageState extends State<FocusPage> {
   bool _quickPrayInitialized = false;
   Set<String> _selectedPrayerIds = {};
 
+  // Tab controller for Active Prayers / Hall of Faith
+  late TabController _tabController;
+  int _selectedTabIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(() {
+      setState(() => _selectedTabIndex = _tabController.index);
+    });
+  }
+
   @override
   void dispose() {
     _pageController.dispose();
+    _tabController.dispose();
     super.dispose();
   }
 
@@ -148,84 +165,226 @@ class _FocusPageState extends State<FocusPage> {
           );
         }
 
-        // Main Focus Page
+        // Get answered prayers for Hall of Faith
+        final answeredPrayers =
+            prayers.where((p) => p.status == PrayerStatus.answered).toList();
+
+        // Main Prayer Time Page with Tabs
         return Scaffold(
           backgroundColor:
               isDark ? AppTheme.darkBackground : AppTheme.lightBackground,
           body: SafeArea(
-            child: CustomScrollView(
-              slivers: [
+            child: NestedScrollView(
+              headerSliverBuilder: (context, innerBoxIsScrolled) => [
                 SliverAppBar(
                   floating: true,
+                  pinned: true,
                   backgroundColor:
                       isDark ? AppTheme.darkBackground : AppTheme.lightBackground,
                   title: Text(
-                    'Focus',
+                    'Prayer Time',
                     style: GoogleFonts.outfit(
                       fontSize: 28,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                ),
-                SliverPadding(
-                  padding: const EdgeInsets.all(16),
-                  sliver: SliverList(
-                    delegate: SliverChildListDelegate([
-                      // Sacred Timer Card with Duration Selection
-                      _SacredTimerCard(
-                        prayerCount: activePrayers.length,
-                        onStartFocus: activePrayers.isNotEmpty
-                            ? (duration) => _showPrayerSelection(activePrayers, duration)
-                            : null,
-                      ),
-                      const SizedBox(height: 24),
-
-                      // Prayer Queue Preview
-                      if (activePrayers.isNotEmpty) ...[
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'Prayer Queue',
-                              style: GoogleFonts.outfit(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            Text(
-                              '${activePrayers.length} prayers',
-                              style: GoogleFonts.inter(
-                                fontSize: 14,
-                                color: isDark ? Colors.white54 : Colors.black45,
-                              ),
-                            ),
-                          ],
+                  bottom: PreferredSize(
+                    preferredSize: const Size.fromHeight(56),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        border: Border(
+                          bottom: BorderSide(
+                            color: isDark ? Colors.white12 : Colors.grey.shade200,
+                          ),
                         ),
-                        const SizedBox(height: 12),
-                        ...activePrayers.take(5).map((prayer) => _PrayerQueueItem(
-                              prayer: prayer,
-                              isFirst: activePrayers.indexOf(prayer) == 0,
-                            )),
-                        if (activePrayers.length > 5)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 8),
-                            child: Text(
-                              '+${activePrayers.length - 5} more prayers',
-                              style: theme.textTheme.bodySmall,
+                      ),
+                      child: TabBar(
+                        controller: _tabController,
+                        indicatorColor: AppTheme.primaryColor,
+                        indicatorWeight: 3,
+                        labelColor: isDark ? Colors.white : Colors.black87,
+                        unselectedLabelColor: isDark ? Colors.white54 : Colors.black45,
+                        labelStyle: GoogleFonts.inter(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        unselectedLabelStyle: GoogleFonts.inter(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        tabs: [
+                          Tab(
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(LucideIcons.heart, size: 18),
+                                const SizedBox(width: 8),
+                                Text('Active (${activePrayers.length})'),
+                              ],
                             ),
                           ),
-                      ] else
-                        _EmptyFocusState(),
-
-                      const SizedBox(height: 100),
-                    ]),
+                          Tab(
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  LucideIcons.trophy,
+                                  size: 18,
+                                  color: _selectedTabIndex == 1
+                                      ? AppTheme.goldenPromise
+                                      : null,
+                                ),
+                                const SizedBox(width: 8),
+                                Text('Answered (${answeredPrayers.length})'),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ],
+              body: TabBarView(
+                controller: _tabController,
+                children: [
+                  // Active Prayers Tab
+                  _buildActivePrayersTab(activePrayers, isDark, theme),
+
+                  // Hall of Faith Tab (Answered Prayers)
+                  answeredPrayers.isEmpty
+                      ? _EmptyAnsweredState()
+                      : HallOfFaithContent(prayers: answeredPrayers),
+                ],
+              ),
             ),
           ),
         );
       },
+    );
+  }
+
+  /// Builds the Active Prayers tab content.
+  Widget _buildActivePrayersTab(List<Prayer> activePrayers, bool isDark, ThemeData theme) {
+    return CustomScrollView(
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.all(16),
+          sliver: SliverList(
+            delegate: SliverChildListDelegate([
+              // Sacred Timer Card with Duration Selection
+              _SacredTimerCard(
+                prayerCount: activePrayers.length,
+                onStartFocus: activePrayers.isNotEmpty
+                    ? (duration) => _showPrayerSelection(activePrayers, duration)
+                    : null,
+              ),
+              const SizedBox(height: 24),
+
+              // Prayer Queue Preview
+              if (activePrayers.isNotEmpty) ...[
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Prayer Queue',
+                      style: GoogleFonts.outfit(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      '${activePrayers.length} prayers',
+                      style: GoogleFonts.inter(
+                        fontSize: 14,
+                        color: isDark ? Colors.white54 : Colors.black45,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                ...activePrayers.take(5).map((prayer) => _PrayerQueueItem(
+                      prayer: prayer,
+                      isFirst: activePrayers.indexOf(prayer) == 0,
+                    )),
+                if (activePrayers.length > 5)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      '+${activePrayers.length - 5} more prayers',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ),
+              ] else
+                _EmptyFocusState(),
+
+              const SizedBox(height: 100),
+            ]),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Empty state for answered prayers tab.
+class _EmptyAnsweredState extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: AppTheme.goldenPromise.withAlpha(20),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                LucideIcons.trophy,
+                size: 48,
+                color: AppTheme.goldenPromise.withAlpha(150),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'No Answered Prayers Yet',
+              style: GoogleFonts.outfit(
+                fontSize: 22,
+                fontWeight: FontWeight.w600,
+                color: isDark ? Colors.white : Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '"Keep asking, and it will be given to you"\n— Matthew 7:7',
+              style: GoogleFonts.lora(
+                fontSize: 15,
+                color: isDark ? Colors.white54 : Colors.black45,
+                fontStyle: FontStyle.italic,
+                height: 1.5,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'When God answers a prayer, mark it as answered\nand add your testimony here.',
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                color: isDark ? Colors.white38 : Colors.black38,
+                height: 1.5,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -1111,20 +1270,13 @@ class _FocusModeViewState extends State<_FocusModeView>
         ),
         const SizedBox(width: 16),
         _ActionButton(
-          icon: LucideIcons.sparkles,
-          label: 'Answered',
-          color: AppTheme.answeredColor,
+          icon: LucideIcons.moreHorizontal,
+          label: 'More',
+          color: AppTheme.primaryColor,
           onTap: () {
-            context.read<PrayerCubit>().markAsAnswered(
-                  widget.prayers[widget.currentIndex].id,
-                );
-            HapticFeedback.heavyImpact();
-            if (widget.currentIndex < widget.prayers.length - 1) {
-              widget.pageController.nextPage(
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeInOut,
-              );
-            }
+            HapticFeedback.selectionClick();
+            // Open detail sheet for full actions including "Mark as Answered" with confirmation
+            PrayerDetailSheet.show(context, widget.prayers[widget.currentIndex]);
           },
         ),
       ],

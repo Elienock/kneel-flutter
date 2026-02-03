@@ -156,13 +156,86 @@ class MockAuthService implements IAuthService {
   }
 
   @override
+  @Deprecated('Use forceLogoutAndClearAllData instead')
+  Future<void> forceGlobalLogout() async {
+    await forceLogoutAndClearAllData();
+  }
+
+  @override
+  Future<bool> forceLogoutAndClearAllData() async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    _currentUser = null;
+    _authStateController.add(null);
+    return true;
+  }
+
+  @override
   Future<bool> isBiometricAvailable() async {
     return true;
   }
 
   @override
+  Future<bool> isBiometricLoginEnabled() async {
+    return false; // Mock: biometric login not enabled
+  }
+
+  @override
   Future<bool> hasPreviousSession() async {
     return true;
+  }
+
+  @override
+  Future<String?> getRefreshToken() async {
+    return 'mock_refresh_token';
+  }
+
+  @override
+  Future<bool> enableBiometricLogin() async {
+    return true; // Mock: always succeeds
+  }
+
+  @override
+  Future<void> disableBiometricLogin() async {
+    // Mock: no-op
+  }
+
+  @override
+  Future<void> linkPhoneNumber({
+    required String phoneNumber,
+    required Function(String verificationId) onCodeSent,
+    required Function(String error) onVerificationFailed,
+    Function()? onLinkSuccess,
+  }) async {
+    await Future.delayed(_mockDelay);
+    onCodeSent('mock_link_verification_id');
+  }
+
+  @override
+  Future<void> verifyAndLinkPhone({
+    required String verificationId,
+    required String smsCode,
+  }) async {
+    await Future.delayed(_mockDelay);
+    if (smsCode != '123456') {
+      throw Exception('Invalid verification code');
+    }
+    // Mock: Update current user with phone
+    if (_currentUser != null) {
+      _currentUser = _currentUser!.copyWith(phoneNumber: '+27123456789');
+      _authStateController.add(_currentUser);
+    }
+  }
+
+  @override
+  Future<void> updatePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    await Future.delayed(_mockDelay);
+    if (currentPassword != 'password123') {
+      throw Exception('Current password is incorrect');
+    }
+    // Mock: Password updated successfully
   }
 
   void dispose() {

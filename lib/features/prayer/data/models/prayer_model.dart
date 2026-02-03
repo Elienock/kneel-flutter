@@ -82,6 +82,12 @@ class PrayerModel extends HiveObject {
   @HiveField(15, defaultValue: false)
   final bool isLocked;
 
+  @HiveField(16)
+  final String? testimonyImageUrl;
+
+  @HiveField(17, defaultValue: false)
+  final bool isPublicTestimony;
+
   PrayerModel({
     required this.id,
     required this.title,
@@ -99,6 +105,8 @@ class PrayerModel extends HiveObject {
     required this.tags,
     this.testimony,
     this.scriptureReference,
+    this.testimonyImageUrl,
+    this.isPublicTestimony = false,
   });
 
   /// Creates a PrayerModel from a domain Prayer entity.
@@ -120,6 +128,8 @@ class PrayerModel extends HiveObject {
       tags: List<String>.from(prayer.tags),
       testimony: prayer.testimony,
       scriptureReference: prayer.scriptureReference,
+      testimonyImageUrl: prayer.testimonyImageUrl,
+      isPublicTestimony: prayer.isPublicTestimony,
     );
   }
 
@@ -141,6 +151,8 @@ class PrayerModel extends HiveObject {
       tags: List<String>.from(tags),
       testimony: testimony,
       scriptureReference: scriptureReference,
+      testimonyImageUrl: testimonyImageUrl,
+      isPublicTestimony: isPublicTestimony,
     );
   }
 
@@ -161,6 +173,8 @@ class PrayerModel extends HiveObject {
     List<String>? tags,
     String? testimony,
     String? scriptureReference,
+    String? testimonyImageUrl,
+    bool? isPublicTestimony,
   }) {
     return PrayerModel(
       id: id ?? this.id,
@@ -179,6 +193,8 @@ class PrayerModel extends HiveObject {
       tags: tags ?? this.tags,
       testimony: testimony ?? this.testimony,
       scriptureReference: scriptureReference ?? this.scriptureReference,
+      testimonyImageUrl: testimonyImageUrl ?? this.testimonyImageUrl,
+      isPublicTestimony: isPublicTestimony ?? this.isPublicTestimony,
     );
   }
 

@@ -8,6 +8,7 @@ import 'package:quick_church/features/prayer/domain/entities/prayer.dart';
 import 'package:quick_church/features/prayer/presentation/bloc/prayer_cubit.dart';
 import 'package:quick_church/features/prayer/presentation/widgets/edit_prayer_bottom_sheet.dart';
 import 'package:quick_church/features/prayer/presentation/widgets/pin_dialog.dart';
+import 'package:quick_church/features/sacred_time/sacred_time.dart';
 
 /// Bottom sheet showing full prayer details with actions.
 class PrayerDetailSheet extends StatefulWidget {
@@ -94,6 +95,12 @@ class _PrayerDetailSheetState extends State<PrayerDetailSheet> {
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
+                // Log past prayer button
+                IconButton(
+                  icon: const Icon(LucideIcons.history),
+                  tooltip: 'Log Past Prayer',
+                  onPressed: () => _showLogManualPrayerDialog(context),
+                ),
                 // Share button
                 IconButton(
                   icon: const Icon(LucideIcons.share2),
@@ -284,29 +291,35 @@ class _PrayerDetailSheetState extends State<PrayerDetailSheet> {
 
             const SizedBox(height: 24),
 
-            // Action buttons
+            // Primary action: Enter Sanctuary to pray for this specific prayer
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: () async {
+                  HapticFeedback.mediumImpact();
+                  Navigator.pop(context); // Close the detail sheet first
+
+                  // Launch Sacred Time with prayer context
+                  await SacredTime.start(
+                    context,
+                    prayerId: widget.prayer.id,
+                    prayerTitle: widget.prayer.title,
+                  );
+                },
+                icon: const Icon(LucideIcons.timer),
+                label: const Text('Enter Sanctuary'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppTheme.primaryColor,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // Secondary actions row
             Row(
               children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () {
-                      HapticFeedback.lightImpact();
-                      context.read<PrayerCubit>().incrementPrayerCount(widget.prayer.id);
-                      Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Amen. Your prayer has been recorded.')),
-                      );
-                    },
-                    icon: const Icon(LucideIcons.checkCircle),
-                    label: const Text('Pray'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppTheme.secondaryColor,
-                      side: const BorderSide(color: AppTheme.secondaryColor),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
+                // Answered/Reactivate button (now secondary, not primary)
                 Expanded(
                   child: isAnswered
                       ? OutlinedButton.icon(
@@ -314,43 +327,39 @@ class _PrayerDetailSheetState extends State<PrayerDetailSheet> {
                             context.read<PrayerCubit>().markAsActive(widget.prayer.id);
                             Navigator.pop(context);
                           },
-                          icon: const Icon(LucideIcons.refreshCw),
+                          icon: const Icon(LucideIcons.refreshCw, size: 18),
                           label: const Text('Reactivate'),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: AppTheme.mediumColor,
                             side: const BorderSide(color: AppTheme.mediumColor),
-                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
                           ),
                         )
-                      : FilledButton.icon(
-                          onPressed: () {
-                            context.read<PrayerCubit>().markAsAnswered(widget.prayer.id);
-                            Navigator.pop(context);
-                          },
-                          icon: const Icon(LucideIcons.sparkles),
+                      : OutlinedButton.icon(
+                          onPressed: () => _showMarkAsAnsweredConfirmation(context),
+                          icon: const Icon(LucideIcons.sparkles, size: 18),
                           label: const Text('Answered'),
-                          style: FilledButton.styleFrom(
-                            backgroundColor: AppTheme.answeredColor,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppTheme.answeredColor,
+                            side: BorderSide(color: AppTheme.answeredColor.withAlpha(150)),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
                           ),
                         ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: TextButton.icon(
-                onPressed: () {
-                  context.read<PrayerCubit>().deletePrayer(widget.prayer.id);
-                  Navigator.pop(context);
-                },
-                icon: const Icon(LucideIcons.trash2),
-                label: const Text('Delete Prayer'),
-                style: TextButton.styleFrom(
-                  foregroundColor: AppTheme.urgentColor,
+                const SizedBox(width: 12),
+                // Delete button
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _showDeleteConfirmation(context),
+                    icon: Icon(LucideIcons.trash2, size: 18, color: AppTheme.urgentColor.withAlpha(180)),
+                    label: Text('Delete', style: TextStyle(color: AppTheme.urgentColor.withAlpha(180))),
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: AppTheme.urgentColor.withAlpha(100)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
             const SizedBox(height: 8),
           ],
@@ -380,12 +389,314 @@ class _PrayerDetailSheetState extends State<PrayerDetailSheet> {
     Share.share(text, subject: 'Prayer Request: ${widget.prayer.title}');
   }
 
+  /// Shows dialog to log a past prayer session (for offline prayers, group prayers, etc.)
+  Future<void> _showLogManualPrayerDialog(BuildContext context) async {
+    final cubit = context.read<PrayerCubit>();
+    int durationMinutes = 5;
+    DateTime selectedDate = DateTime.now();
+    final notesController = TextEditingController();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final theme = Theme.of(context);
+          final isDark = theme.brightness == Brightness.dark;
+
+          return AlertDialog(
+            title: Row(
+              children: [
+                Icon(
+                  LucideIcons.history,
+                  color: AppTheme.secondaryColor,
+                  size: 24,
+                ),
+                const SizedBox(width: 12),
+                const Text('Log Past Prayer'),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Record a prayer you prayed offline, in a group, or on the go.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.outline,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Duration selector
+                  Text(
+                    'How long did you pray?',
+                    style: theme.textTheme.labelLarge,
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? const Color(0xFF2C2C2E)
+                          : const Color(0xFFF8F8F8),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      children: [
+                        Text(
+                          '$durationMinutes min',
+                          style: theme.textTheme.headlineSmall?.copyWith(
+                            color: AppTheme.secondaryColor,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Slider(
+                          value: durationMinutes.toDouble(),
+                          min: 1,
+                          max: 60,
+                          divisions: 59,
+                          activeColor: AppTheme.secondaryColor,
+                          label: '$durationMinutes min',
+                          onChanged: (value) {
+                            setDialogState(() {
+                              durationMinutes = value.round();
+                            });
+                          },
+                        ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('1 min', style: theme.textTheme.bodySmall),
+                            Text('60 min', style: theme.textTheme.bodySmall),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Date selector
+                  Text(
+                    'When did you pray?',
+                    style: theme.textTheme.labelLarge,
+                  ),
+                  const SizedBox(height: 8),
+                  InkWell(
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: selectedDate,
+                        firstDate: DateTime.now().subtract(const Duration(days: 365)),
+                        lastDate: DateTime.now(),
+                      );
+                      if (picked != null) {
+                        setDialogState(() {
+                          selectedDate = picked;
+                        });
+                      }
+                    },
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? const Color(0xFF2C2C2E)
+                            : const Color(0xFFF8F8F8),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            LucideIcons.calendar,
+                            color: theme.colorScheme.outline,
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            _formatDate(selectedDate),
+                            style: theme.textTheme.bodyLarge,
+                          ),
+                          const Spacer(),
+                          Icon(
+                            LucideIcons.chevronDown,
+                            color: theme.colorScheme.outline,
+                            size: 20,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Optional notes
+                  Text(
+                    'Notes (optional)',
+                    style: theme.textTheme.labelLarge,
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: notesController,
+                    maxLines: 2,
+                    decoration: InputDecoration(
+                      hintText: 'e.g., "Prayed during morning walk"',
+                      filled: true,
+                      fillColor: isDark
+                          ? const Color(0xFF2C2C2E)
+                          : const Color(0xFFF8F8F8),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton.icon(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                icon: const Icon(LucideIcons.check),
+                label: const Text('Log Prayer'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppTheme.secondaryColor,
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    if (confirmed == true && context.mounted) {
+      final notes = notesController.text.trim().isEmpty ? null : notesController.text.trim();
+      await cubit.logManualPrayer(
+        prayerId: widget.prayer.id,
+        durationMinutes: durationMinutes,
+        prayedAt: selectedDate,
+        notes: notes,
+      );
+      if (context.mounted) {
+        Navigator.pop(context);
+      }
+    }
+    notesController.dispose();
+  }
+
   String _formatDate(DateTime date) {
     final months = [
       'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
     ];
     return '${months[date.month - 1]} ${date.day}, ${date.year}';
+  }
+
+  /// Shows confirmation dialog before marking prayer as answered.
+  /// This is a significant spiritual moment - not to be done casually.
+  Future<void> _showMarkAsAnsweredConfirmation(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(LucideIcons.sparkles, color: AppTheme.answeredColor, size: 24),
+            const SizedBox(width: 12),
+            const Text('Mark as Answered?'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'This is a moment of celebration!',
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Your prayer "${widget.prayer.title}" will be moved to the Hall of Faith.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            if (widget.prayer.prayerCount > 0) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.goldenPromise.withAlpha(20),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(LucideIcons.flame, size: 18, color: AppTheme.goldenPromise),
+                    const SizedBox(width: 8),
+                    Text(
+                      "You've prayed for this ${widget.prayer.prayerCount} times",
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppTheme.goldenPromise,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Not Yet'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(ctx, true),
+            icon: const Icon(LucideIcons.trophy, size: 18),
+            label: const Text('Praise God!'),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppTheme.answeredColor,
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && context.mounted) {
+      context.read<PrayerCubit>().markAsAnswered(widget.prayer.id);
+      Navigator.pop(context);
+    }
+  }
+
+  /// Shows confirmation dialog before deleting a prayer.
+  Future<void> _showDeleteConfirmation(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Prayer?'),
+        content: Text('Are you sure you want to delete "${widget.prayer.title}"? This cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppTheme.urgentColor,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && context.mounted) {
+      context.read<PrayerCubit>().deletePrayer(widget.prayer.id);
+      Navigator.pop(context);
+    }
   }
 }
 

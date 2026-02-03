@@ -1,0 +1,111 @@
+-- Prayers Table Schema
+-- Core table for storing prayer requests
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS prayers (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL,
+  requester_name TEXT,
+
+  -- Status tracking
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'answered', 'archived')),
+  priority TEXT NOT NULL DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high', 'urgent')),
+  is_locked BOOLEAN NOT NULL DEFAULT FALSE,
+
+  -- Persistence tracking (Luke 18:1 - "pray and not give up")
+  prayer_count INTEGER NOT NULL DEFAULT 0,
+  times_prayed INTEGER NOT NULL DEFAULT 0,
+  last_prayed_at TIMESTAMPTZ,
+
+  -- Answered prayer tracking
+  answered_at TIMESTAMPTZ,
+  testimony TEXT,
+  testimony_image_url TEXT,
+  is_public_testimony BOOLEAN NOT NULL DEFAULT FALSE,
+
+  -- Metadata
+  tags TEXT[] DEFAULT '{}',
+  scripture_reference TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Indexes for common query patterns
+CREATE INDEX IF NOT EXISTS idx_prayers_user_id ON prayers(user_id);
+CREATE INDEX IF NOT EXISTS idx_prayers_status ON prayers(status);
+CREATE INDEX IF NOT EXISTS idx_prayers_user_status ON prayers(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_prayers_answered_at ON prayers(answered_at DESC NULLS LAST);
+CREATE INDEX IF NOT EXISTS idx_prayers_created_at ON prayers(created_at DESC);
+
+-- Enable RLS
+ALTER TABLE prayers ENABLE ROW LEVEL SECURITY;
+
+-- RLS Policies
+CREATE POLICY "Users can view own prayers"
+  ON prayers FOR SELECT
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own prayers"
+  ON prayers FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own prayers"
+  ON prayers FOR UPDATE
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own prayers"
+  ON prayers FOR DELETE
+  USING (auth.uid() = user_id);
+
+-- Public testimony viewing (for community features)
+CREATE POLICY "Users can view public testimonies"
+  ON prayers FOR SELECT
+  USING (
+    is_public_testimony = TRUE
+    AND status = 'answered'
+    AND testimony IS NOT NULL
+  );
+
+-- Trigger to update updated_at timestamp
+CREATE OR REPLACE FUNCTION update_prayers_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_prayers_updated_at
+  BEFORE UPDATE ON prayers
+  FOR EACH ROW
+  EXECUTE FUNCTION update_prayers_updated_at();
+
+-- Trigger to set answered_at when status changes to answered
+CREATE OR REPLACE FUNCTION set_answered_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.status = 'answered' AND OLD.status != 'answered' THEN
+    NEW.answered_at = NOW();
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_set_answered_at
+  BEFORE UPDATE ON prayers
+  FOR EACH ROW
+  EXECUTE FUNCTION set_answered_at();
+
+-- Grant permissions
+GRANT SELECT, INSERT, UPDATE, DELETE ON prayers TO authenticated;
+
+-- ============================================================================
+-- COMMENTS
+-- ============================================================================
+
+COMMENT ON TABLE prayers IS 'Core prayer requests table with persistence tracking';
+COMMENT ON COLUMN prayers.times_prayed IS 'Denormalized count of prayer sessions for display badges';
+COMMENT ON COLUMN prayers.prayer_count IS 'Legacy counter - kept for compatibility, use times_prayed';
+COMMENT ON COLUMN prayers.is_public_testimony IS 'Whether the testimony is shared with the community';

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:quick_church/core/theme/app_theme.dart';
+import 'package:quick_church/core/widgets/kneel_logo.dart';
 
 /// About page displaying app information, developer credits, and roadmap.
 class AboutPage extends StatelessWidget {
@@ -97,41 +98,12 @@ class AboutPage extends StatelessWidget {
       ),
       child: Column(
         children: [
-          // App Icon
-          Container(
-            width: 80,
+          // Official Kneel Logo - Dark variant with elevation for About page
+          KneelLogo.dark(
             height: 80,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: AppTheme.primaryColor.withAlpha(102),
-                  blurRadius: 20,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(20),
-              child: Image.asset(
-                'assets/icon/app_icon.png',
-                width: 80,
-                height: 80,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
-                  // Fallback to heart icon if image fails
-                  return Container(
-                    color: AppTheme.primaryColor,
-                    child: const Icon(
-                      LucideIcons.heart,
-                      size: 40,
-                      color: Colors.white,
-                    ),
-                  );
-                },
-              ),
-            ),
+            showElevation: true,
+            elevation: 8,
+            shadowColor: AppTheme.primaryColor.withAlpha(102),
           ),
           const SizedBox(height: 16),
           Text(

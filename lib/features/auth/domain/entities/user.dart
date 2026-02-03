@@ -22,6 +22,34 @@ class User extends Equatable {
     this.isEmailVerified = false,
   });
 
+  /// Sanitizes a phone number value.
+  /// Returns null if the value is null or empty (Safe-Save Rule).
+  /// This prevents unique constraint violations on empty strings in the database.
+  static String? sanitizePhone(String? phone) {
+    if (phone == null) return null;
+    final trimmed = phone.trim();
+    return trimmed.isEmpty ? null : trimmed;
+  }
+
+  /// Merges phone numbers with priority: userInput > authProvider > existing.
+  /// Returns null if all values are null/empty (Safe-Save Rule).
+  static String? mergePhone({
+    String? userInput,
+    String? authProviderPhone,
+    String? existingDatabasePhone,
+  }) {
+    // Priority 1: User explicitly entered a phone number
+    final sanitizedInput = sanitizePhone(userInput);
+    if (sanitizedInput != null) return sanitizedInput;
+
+    // Priority 2: Phone from auth provider (Google/Firebase)
+    final sanitizedAuth = sanitizePhone(authProviderPhone);
+    if (sanitizedAuth != null) return sanitizedAuth;
+
+    // Priority 3: Existing phone in database
+    return sanitizePhone(existingDatabasePhone);
+  }
+
   /// Creates a copy of this user with the given fields replaced.
   User copyWith({
     String? id,

@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:injectable/injectable.dart';
 import 'package:quick_church/core/usecases/usecase.dart';
 import 'package:quick_church/features/prayer/domain/entities/prayer.dart';
+import 'package:quick_church/features/prayer/domain/entities/prayer_session.dart';
 import 'package:quick_church/features/prayer/domain/repositories/i_prayer_repository.dart';
 import 'package:quick_church/features/prayer/domain/usecases/add_prayer.dart';
 import 'package:quick_church/features/prayer/domain/usecases/delete_prayer.dart';
@@ -292,5 +293,106 @@ class PrayerCubit extends Cubit<PrayerState> {
           p.description.toLowerCase().contains(lowerQuery) ||
           p.tags.any((tag) => tag.toLowerCase().contains(lowerQuery));
     }).toList();
+  }
+
+  // ============================================================================
+  // PRAYER PERSISTENCE / SESSION LOGGING
+  // These track individual prayer sessions for the "Prayed Xх" badge
+  // ============================================================================
+
+  /// Records a prayer session from Sacred Time or other timed prayer.
+  /// This increments the prayer's count and logs the session for history.
+  /// Returns the new total times prayed.
+  Future<int?> recordPrayerSession({
+    required String prayerId,
+    required int durationMinutes,
+    int? actualDurationSeconds,
+    DateTime? prayedAt,
+    String? notes,
+  }) async {
+    final currentPrayers = state is PrayerLoaded
+        ? (state as PrayerLoaded).prayers
+        : <Prayer>[];
+
+    final result = await _repository.recordPrayerSession(
+      prayerId: prayerId,
+      durationMinutes: durationMinutes,
+      actualDurationSeconds: actualDurationSeconds,
+      prayedAt: prayedAt,
+      isManual: false,
+      notes: notes,
+    );
+
+    if (result.failure != null) {
+      return null;
+    }
+
+    // Update local state with new prayer count
+    final updatedPrayer = result.data!;
+    final updatedPrayers = currentPrayers.map((p) {
+      if (p.id == prayerId) return updatedPrayer;
+      return p;
+    }).toList();
+
+    emit(PrayerLoaded(
+      updatedPrayers,
+      successMessage: "Session recorded. You've lifted this up ${updatedPrayer.prayerCount} times.",
+    ));
+
+    return updatedPrayer.prayerCount;
+  }
+
+  /// Logs a manual prayer session (for offline/unreported prayers).
+  /// This allows users to record prayers done without the app.
+  Future<int?> logManualPrayer({
+    required String prayerId,
+    required int durationMinutes,
+    required DateTime prayedAt,
+    String? notes,
+  }) async {
+    final currentPrayers = state is PrayerLoaded
+        ? (state as PrayerLoaded).prayers
+        : <Prayer>[];
+
+    HapticFeedback.mediumImpact();
+
+    final result = await _repository.recordPrayerSession(
+      prayerId: prayerId,
+      durationMinutes: durationMinutes,
+      prayedAt: prayedAt,
+      isManual: true,
+      notes: notes,
+    );
+
+    if (result.failure != null) {
+      emit(PrayerError('Failed to log prayer: ${result.failure!.message}'));
+      return null;
+    }
+
+    // Update local state with new prayer count
+    final updatedPrayer = result.data!;
+    final updatedPrayers = currentPrayers.map((p) {
+      if (p.id == prayerId) return updatedPrayer;
+      return p;
+    }).toList();
+
+    emit(PrayerLoaded(
+      updatedPrayers,
+      successMessage: 'Prayer logged! Total: ${updatedPrayer.prayerCount} times',
+    ));
+
+    return updatedPrayer.prayerCount;
+  }
+
+  /// Gets the prayer history (all sessions) for a specific prayer.
+  Future<List<PrayerSession>> getPrayerHistory(String prayerId) async {
+    final result = await _repository.getPrayerHistory(prayerId);
+    return result.data ?? [];
+  }
+
+  /// Gets persistence stats for a prayer.
+  Future<Map<String, dynamic>?> getPrayerPersistenceStats(String prayerId) async {
+    final result = await _repository.getPrayerPersistenceStats(prayerId);
+    return result.data;
   }
 }

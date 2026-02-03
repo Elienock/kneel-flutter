@@ -15,6 +15,11 @@ class Profile extends Equatable {
   final DateTime createdAt;
   final DateTime updatedAt;
 
+  // Insights & Streak fields
+  final int answeredPrayersCount;
+  final int currentStreak;
+  final int longestStreak;
+
   const Profile({
     required this.id,
     required this.email,
@@ -28,6 +33,9 @@ class Profile extends Equatable {
     this.emailVerified = false,
     required this.createdAt,
     required this.updatedAt,
+    this.answeredPrayersCount = 0,
+    this.currentStreak = 0,
+    this.longestStreak = 0,
   });
 
   /// Creates a Profile from Supabase JSON response.
@@ -49,15 +57,20 @@ class Profile extends Equatable {
       updatedAt: json['updated_at'] != null
           ? DateTime.parse(json['updated_at'] as String)
           : DateTime.now(),
+      answeredPrayersCount: json['answered_prayers_count'] as int? ?? 0,
+      currentStreak: json['current_streak'] as int? ?? 0,
+      longestStreak: json['longest_streak'] as int? ?? 0,
     );
   }
 
   /// Converts Profile to JSON for Supabase upsert.
+  ///
+  /// IMPORTANT: phone_number is sanitized to prevent unique constraint violations.
+  /// Empty strings are converted to null and excluded from the map.
   Map<String, dynamic> toJson() {
-    return {
+    final map = <String, dynamic>{
       'id': id,
       'email': email,
-      'phone_number': phoneNumber,
       'display_name': displayName,
       'photo_url': photoUrl,
       'provider': provider,
@@ -67,6 +80,16 @@ class Profile extends Equatable {
       'email_verified': emailVerified,
       'updated_at': DateTime.now().toIso8601String(),
     };
+
+    // Only include phone_number if it has a real value (not null or empty)
+    // This prevents unique constraint violations on empty strings
+    final sanitizedPhone = phoneNumber?.trim();
+    if (sanitizedPhone != null && sanitizedPhone.isNotEmpty) {
+      map['phone_number'] = sanitizedPhone;
+    }
+    // If phone is null/empty, we DON'T include it - let the DB keep existing value or NULL
+
+    return map;
   }
 
   /// Creates a copy with the given fields replaced.
@@ -83,6 +106,9 @@ class Profile extends Equatable {
     bool? emailVerified,
     DateTime? createdAt,
     DateTime? updatedAt,
+    int? answeredPrayersCount,
+    int? currentStreak,
+    int? longestStreak,
   }) {
     return Profile(
       id: id ?? this.id,
@@ -97,6 +123,9 @@ class Profile extends Equatable {
       emailVerified: emailVerified ?? this.emailVerified,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      answeredPrayersCount: answeredPrayersCount ?? this.answeredPrayersCount,
+      currentStreak: currentStreak ?? this.currentStreak,
+      longestStreak: longestStreak ?? this.longestStreak,
     );
   }
 
@@ -151,5 +180,8 @@ class Profile extends Equatable {
         emailVerified,
         createdAt,
         updatedAt,
+        answeredPrayersCount,
+        currentStreak,
+        longestStreak,
       ];
 }

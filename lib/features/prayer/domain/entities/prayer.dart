@@ -35,6 +35,12 @@ class Prayer extends Equatable {
   final String? testimony;
   final String? scriptureReference;
 
+  /// Image URL for testimony (miracle photo, sunset, etc.)
+  final String? testimonyImageUrl;
+
+  /// Whether this testimony is shared publicly with the community
+  final bool isPublicTestimony;
+
   const Prayer({
     required this.id,
     required this.title,
@@ -51,6 +57,8 @@ class Prayer extends Equatable {
     this.tags = const [],
     this.testimony,
     this.scriptureReference,
+    this.testimonyImageUrl,
+    this.isPublicTestimony = false,
   });
 
   /// Creates a copy of this Prayer with the given fields replaced.
@@ -70,6 +78,8 @@ class Prayer extends Equatable {
     List<String>? tags,
     String? testimony,
     String? scriptureReference,
+    String? testimonyImageUrl,
+    bool? isPublicTestimony,
   }) {
     return Prayer(
       id: id ?? this.id,
@@ -87,7 +97,24 @@ class Prayer extends Equatable {
       tags: tags ?? this.tags,
       testimony: testimony ?? this.testimony,
       scriptureReference: scriptureReference ?? this.scriptureReference,
+      testimonyImageUrl: testimonyImageUrl ?? this.testimonyImageUrl,
+      isPublicTestimony: isPublicTestimony ?? this.isPublicTestimony,
     );
+  }
+
+  /// Whether this prayer has been answered and has a testimony.
+  bool get hasTestimony => status == PrayerStatus.answered && testimony != null && testimony!.isNotEmpty;
+
+  /// Days since the prayer was answered.
+  int? get daysSinceAnswered {
+    if (answeredAt == null) return null;
+    return DateTime.now().difference(answeredAt!).inDays;
+  }
+
+  /// Days the prayer was active before being answered.
+  int? get daysToAnswer {
+    if (answeredAt == null) return null;
+    return answeredAt!.difference(createdAt).inDays;
   }
 
   @override
@@ -107,5 +134,7 @@ class Prayer extends Equatable {
         tags,
         testimony,
         scriptureReference,
+        testimonyImageUrl,
+        isPublicTestimony,
       ];
 }

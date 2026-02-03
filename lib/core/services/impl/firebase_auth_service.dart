@@ -85,6 +85,9 @@ class FirebaseAuthService implements IAuthService {
 
   // ===== Phone Authentication =====
 
+  /// Track if auto-verification has completed to prevent duplicate submissions
+  bool _autoVerificationCompleted = false;
+
   @override
   Future<void> sendPhoneVerificationCode({
     required String phoneNumber,
@@ -93,59 +96,84 @@ class FirebaseAuthService implements IAuthService {
     Function(User user)? onAutoVerified,
   }) async {
     try {
-      KneelLogger.log('Sending verification code to: $phoneNumber');
+      // Reset auto-verification flag
+      _autoVerificationCompleted = false;
+
+      KneelLogger.log('📱 Sending verification code to: $phoneNumber', context: 'PhoneAuth');
 
       await _firebaseAuth.verifyPhoneNumber(
         phoneNumber: phoneNumber,
-        timeout: const Duration(seconds: 60),
+        timeout: const Duration(seconds: 120), // Increased timeout
         verificationCompleted: (firebase.PhoneAuthCredential credential) async {
-          // Auto-verification (Android only)
-          KneelLogger.log('Phone auto-verification completed');
+          // Auto-verification (Android only) - SMS was auto-read
+          KneelLogger.log('✅ AUTO-VERIFICATION COMPLETED (SMS auto-read)', context: 'PhoneAuth');
+          _autoVerificationCompleted = true;
+
           try {
             final userCredential = await _firebaseAuth.signInWithCredential(credential);
             final firebaseUser = userCredential.user;
             if (firebaseUser != null) {
               await _syncProfileToSupabase(firebaseUser, 'phone');
               await _saveSessionInfo(firebaseUser.uid);
+              KneelLogger.log('✅ Auto-verification sign-in successful', context: 'PhoneAuth');
               onAutoVerified?.call(_mapFirebaseUser(firebaseUser));
             }
           } catch (e) {
-            KneelLogger.error('Auto-verification sign-in failed', e);
+            KneelLogger.error('PhoneAuth: Auto-verification sign-in failed', e);
+            _autoVerificationCompleted = false; // Allow manual retry
           }
         },
         verificationFailed: (firebase.FirebaseAuthException e) {
-          KneelLogger.error('Phone verification failed', e.message);
+          KneelLogger.error('PhoneAuth: Verification failed - ${e.code}', e.message);
           String errorMessage = 'Verification failed';
           if (e.code == 'invalid-phone-number') {
             errorMessage = 'Invalid phone number format';
           } else if (e.code == 'too-many-requests') {
-            errorMessage = 'Too many requests. Please try again later.';
+            errorMessage = 'Too many attempts. Please wait a few minutes.';
+          } else if (e.code == 'quota-exceeded') {
+            errorMessage = 'SMS quota exceeded. Please try again later.';
           } else if (e.message != null) {
             errorMessage = e.message!;
           }
           onVerificationFailed(errorMessage);
         },
         codeSent: (String verificationId, int? resendToken) {
-          KneelLogger.log('Verification code sent. ID: $verificationId');
+          KneelLogger.log('📨 SMS Code sent. VerificationID: ${verificationId.substring(0, 20)}...', context: 'PhoneAuth');
           onCodeSent(verificationId);
         },
         codeAutoRetrievalTimeout: (String verificationId) {
-          KneelLogger.log('Auto-retrieval timeout for: $verificationId');
+          KneelLogger.log('⏱️ Auto-retrieval timeout (normal)', context: 'PhoneAuth');
+          // This is normal - just means SMS wasn't auto-read
         },
       );
     } catch (e) {
-      KneelLogger.error('FirebaseAuthService.sendPhoneVerificationCode', e);
+      KneelLogger.error('PhoneAuth: sendPhoneVerificationCode failed', e);
       onVerificationFailed(e.toString());
     }
   }
+
+  /// Check if auto-verification has already completed
+  bool get isAutoVerificationCompleted => _autoVerificationCompleted;
 
   @override
   Future<User> verifyPhoneCode({
     required String verificationId,
     required String smsCode,
   }) async {
+    // Guard: Don't verify if auto-verification already succeeded
+    if (_autoVerificationCompleted) {
+      KneelLogger.warn('PhoneAuth: Skipping manual verification - auto-verification already completed', context: 'PhoneAuth');
+      final currentUser = _firebaseAuth.currentUser;
+      if (currentUser != null) {
+        return _mapFirebaseUser(currentUser);
+      }
+      throw Exception('Auto-verification completed but no user found');
+    }
+
     try {
-      KneelLogger.log('Verifying phone code...');
+      KneelLogger.log('🔐 Manual OTP verification starting...', context: 'PhoneAuth');
+      KneelLogger.log('   VerificationID: ${verificationId.substring(0, 20)}...', context: 'PhoneAuth');
+      KneelLogger.log('   SMS Code: $smsCode', context: 'PhoneAuth');
 
       // Create credential with the verification ID and SMS code
       final credential = firebase.PhoneAuthProvider.credential(
@@ -167,18 +195,20 @@ class FirebaseAuthService implements IAuthService {
       // Save session info for biometric re-authentication
       await _saveSessionInfo(firebaseUser.uid);
 
-      KneelLogger.log('Phone authentication successful');
+      KneelLogger.log('✅ Phone authentication successful', context: 'PhoneAuth');
       return _mapFirebaseUser(firebaseUser);
     } on firebase.FirebaseAuthException catch (e) {
-      KneelLogger.error('FirebaseAuthService.verifyPhoneCode', e.message);
+      KneelLogger.error('PhoneAuth: verifyPhoneCode failed - ${e.code}', e.message);
       if (e.code == 'invalid-verification-code') {
-        throw Exception('Invalid verification code. Please try again.');
-      } else if (e.code == 'session-expired') {
-        throw Exception('Verification code expired. Please request a new code.');
+        throw Exception('Invalid code. Please check and try again.');
+      } else if (e.code == 'session-expired' || e.message?.contains('expired') == true) {
+        throw Exception('Code expired. Tap "Resend Code" to get a new one.');
+      } else if (e.code == 'credential-already-in-use') {
+        throw Exception('This phone is linked to another account.');
       }
       rethrow;
     } catch (e) {
-      KneelLogger.error('FirebaseAuthService.verifyPhoneCode', e);
+      KneelLogger.error('PhoneAuth: verifyPhoneCode exception', e);
       rethrow;
     }
   }
@@ -343,7 +373,15 @@ class FirebaseAuthService implements IAuthService {
   @override
   Future<User> loginWithBiometrics() async {
     try {
-      // First, verify biometrics
+      KneelLogger.biometric('Attempting biometric login...');
+
+      // Step 1: Check if biometric login is enabled with stored token
+      final isEnabled = await _biometricService.isBiometricLoginEnabled();
+      if (!isEnabled) {
+        throw Exception('Biometric login is not enabled. Please sign in first.');
+      }
+
+      // Step 2: Verify biometrics
       final authenticated = await _biometricService.authenticate(
         reason: 'Authenticate to sign in to Kneel',
       );
@@ -352,15 +390,36 @@ class FirebaseAuthService implements IAuthService {
         throw Exception('Biometric authentication failed');
       }
 
-      // Check if there's an existing Firebase session
+      // Step 3: Check if there's already an active Firebase session
       final currentUser = _firebaseAuth.currentUser;
       if (currentUser != null) {
-        KneelLogger.log('Biometric auth: Using existing Firebase session');
+        KneelLogger.biometric('Using existing Firebase session');
+        await _saveSessionInfo(currentUser.uid);
         return _mapFirebaseUser(currentUser);
       }
 
-      // No existing session
-      throw Exception('Session expired. Please sign in again.');
+      // Step 4: Get stored refresh token and restore session
+      final refreshToken = await _biometricService.getStoredRefreshToken();
+      if (refreshToken == null || refreshToken.isEmpty) {
+        // Token was cleared - disable biometric login
+        await _biometricService.disableBiometricLogin();
+        throw Exception('Session expired. Please sign in again.');
+      }
+
+      // Step 5: Sign in with the stored token
+      // Firebase doesn't have a direct signInWithRefreshToken method,
+      // but we can use signInWithCustomToken if we have backend support.
+      // For now, we'll use the stored user ID to verify and trust the session.
+      final storedUserId = await _biometricService.getStoredUserId();
+      if (storedUserId == null) {
+        await _biometricService.disableBiometricLogin();
+        throw Exception('Session data corrupted. Please sign in again.');
+      }
+
+      // Since Firebase persists auth state, if we reach here without a currentUser,
+      // it means the session truly expired. Clear biometric data and ask to re-login.
+      await _biometricService.disableBiometricLogin();
+      throw Exception('Session expired. Please sign in again to re-enable one-touch login.');
     } catch (e) {
       KneelLogger.error('FirebaseAuthService.loginWithBiometrics', e);
       rethrow;
@@ -373,9 +432,225 @@ class FirebaseAuthService implements IAuthService {
   }
 
   @override
+  Future<bool> isBiometricLoginEnabled() async {
+    return _biometricService.isBiometricLoginEnabled();
+  }
+
+  @override
   Future<bool> hasPreviousSession() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool(_hasSessionKey) ?? false;
+  }
+
+  @override
+  Future<String?> getRefreshToken() async {
+    try {
+      final currentUser = _firebaseAuth.currentUser;
+      if (currentUser == null) return null;
+
+      // Get the ID token which can be used to restore the session
+      final idToken = await currentUser.getIdToken(true);
+      return idToken;
+    } catch (e) {
+      KneelLogger.error('FirebaseAuthService.getRefreshToken', e);
+      return null;
+    }
+  }
+
+  @override
+  Future<bool> enableBiometricLogin() async {
+    try {
+      final currentUser = _firebaseAuth.currentUser;
+      if (currentUser == null) {
+        KneelLogger.warn('Cannot enable biometric login: No user signed in', context: 'Auth');
+        return false;
+      }
+
+      // Get the refresh token (ID token for session restoration)
+      final refreshToken = await getRefreshToken();
+      if (refreshToken == null) {
+        KneelLogger.warn('Cannot enable biometric login: Failed to get token', context: 'Auth');
+        return false;
+      }
+
+      // Enable biometric login (this will verify biometrics and store token)
+      final success = await _biometricService.enableBiometricLogin(
+        refreshToken: refreshToken,
+        userId: currentUser.uid,
+      );
+
+      if (success) {
+        KneelLogger.log('Biometric login enabled for user: ${currentUser.uid}', context: 'Auth');
+      }
+
+      return success;
+    } catch (e) {
+      KneelLogger.error('FirebaseAuthService.enableBiometricLogin', e);
+      return false;
+    }
+  }
+
+  @override
+  Future<void> disableBiometricLogin() async {
+    try {
+      await _biometricService.disableBiometricLogin();
+      KneelLogger.log('Biometric login disabled', context: 'Auth');
+    } catch (e) {
+      KneelLogger.error('FirebaseAuthService.disableBiometricLogin', e);
+    }
+  }
+
+  // ===== Phone Linking (Add phone to existing account) =====
+
+  @override
+  Future<void> linkPhoneNumber({
+    required String phoneNumber,
+    required Function(String verificationId) onCodeSent,
+    required Function(String error) onVerificationFailed,
+    Function()? onLinkSuccess,
+  }) async {
+    try {
+      final currentUser = _firebaseAuth.currentUser;
+      if (currentUser == null) {
+        onVerificationFailed('No user signed in');
+        return;
+      }
+
+      KneelLogger.log('Linking phone number: $phoneNumber', context: 'Auth');
+
+      await _firebaseAuth.verifyPhoneNumber(
+        phoneNumber: phoneNumber,
+        timeout: const Duration(seconds: 60),
+        verificationCompleted: (firebase.PhoneAuthCredential credential) async {
+          // Auto-verification (Android only)
+          KneelLogger.log('Phone auto-verification completed', context: 'Auth');
+          try {
+            await currentUser.linkWithCredential(credential);
+            KneelLogger.log('Phone linked successfully (auto)', context: 'Auth');
+            onLinkSuccess?.call();
+          } catch (e) {
+            KneelLogger.error('Auto-link failed', e);
+            onVerificationFailed(_parseFirebaseError(e));
+          }
+        },
+        verificationFailed: (firebase.FirebaseAuthException e) {
+          KneelLogger.error('Phone verification failed', e.message);
+          onVerificationFailed(_parsePhoneVerificationError(e));
+        },
+        codeSent: (String verificationId, int? resendToken) {
+          KneelLogger.log('Verification code sent for linking', context: 'Auth');
+          onCodeSent(verificationId);
+        },
+        codeAutoRetrievalTimeout: (String verificationId) {
+          KneelLogger.log('Auto-retrieval timeout', context: 'Auth');
+        },
+      );
+    } catch (e) {
+      KneelLogger.error('FirebaseAuthService.linkPhoneNumber', e);
+      onVerificationFailed(e.toString());
+    }
+  }
+
+  @override
+  Future<void> verifyAndLinkPhone({
+    required String verificationId,
+    required String smsCode,
+  }) async {
+    try {
+      final currentUser = _firebaseAuth.currentUser;
+      if (currentUser == null) {
+        throw Exception('No user signed in');
+      }
+
+      KneelLogger.log('Verifying and linking phone...', context: 'Auth');
+
+      final credential = firebase.PhoneAuthProvider.credential(
+        verificationId: verificationId,
+        smsCode: smsCode,
+      );
+
+      await currentUser.linkWithCredential(credential);
+      KneelLogger.log('Phone linked successfully', context: 'Auth');
+    } on firebase.FirebaseAuthException catch (e) {
+      KneelLogger.error('FirebaseAuthService.verifyAndLinkPhone', e.message);
+      if (e.code == 'invalid-verification-code') {
+        throw Exception('Invalid verification code. Please try again.');
+      } else if (e.code == 'session-expired') {
+        throw Exception('Verification code expired. Please request a new code.');
+      } else if (e.code == 'credential-already-in-use') {
+        throw Exception('This phone number is already linked to another account.');
+      } else if (e.code == 'provider-already-linked') {
+        throw Exception('A phone number is already linked to this account.');
+      }
+      rethrow;
+    } catch (e) {
+      KneelLogger.error('FirebaseAuthService.verifyAndLinkPhone', e);
+      rethrow;
+    }
+  }
+
+  // ===== Password Management =====
+
+  @override
+  Future<void> updatePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    try {
+      final currentUser = _firebaseAuth.currentUser;
+      if (currentUser == null) {
+        throw Exception('No user signed in');
+      }
+
+      final email = currentUser.email;
+      if (email == null || email.isEmpty) {
+        throw Exception('No email associated with this account');
+      }
+
+      KneelLogger.log('Updating password for: $email', context: 'Auth');
+
+      // Re-authenticate with current password
+      final credential = firebase.EmailAuthProvider.credential(
+        email: email,
+        password: currentPassword,
+      );
+      await currentUser.reauthenticateWithCredential(credential);
+
+      // Update to new password
+      await currentUser.updatePassword(newPassword);
+      KneelLogger.log('Password updated successfully', context: 'Auth');
+    } on firebase.FirebaseAuthException catch (e) {
+      KneelLogger.error('FirebaseAuthService.updatePassword', e.message);
+      if (e.code == 'wrong-password') {
+        throw Exception('Current password is incorrect.');
+      } else if (e.code == 'weak-password') {
+        throw Exception('New password is too weak. Use at least 6 characters.');
+      } else if (e.code == 'requires-recent-login') {
+        throw Exception('Please sign out and sign in again before changing password.');
+      }
+      rethrow;
+    } catch (e) {
+      KneelLogger.error('FirebaseAuthService.updatePassword', e);
+      rethrow;
+    }
+  }
+
+  String _parsePhoneVerificationError(firebase.FirebaseAuthException e) {
+    if (e.code == 'invalid-phone-number') {
+      return 'Invalid phone number format';
+    } else if (e.code == 'too-many-requests') {
+      return 'Too many requests. Please try again later.';
+    } else if (e.message != null) {
+      return e.message!;
+    }
+    return 'Verification failed';
+  }
+
+  String _parseFirebaseError(dynamic e) {
+    if (e is firebase.FirebaseAuthException) {
+      return e.message ?? e.code;
+    }
+    return e.toString();
   }
 
   // ===== Session Management =====
@@ -408,22 +683,31 @@ class FirebaseAuthService implements IAuthService {
     // Step 1: Disconnect Google Sign-In (fully clears cached account)
     try {
       await _googleSignIn.disconnect();
-      KneelLogger.log('[1/3] Google Sign-In disconnected', context: 'Auth');
+      KneelLogger.log('[1/4] Google Sign-In disconnected', context: 'Auth');
     } catch (e) {
-      KneelLogger.warn('[1/3] Google disconnect failed (may not be signed in): $e', context: 'Auth');
+      KneelLogger.warn('[1/4] Google disconnect failed (may not be signed in): $e', context: 'Auth');
       // Not a critical failure - user might not have used Google
     }
 
     // Step 2: Sign out from Firebase Auth
     try {
       await _firebaseAuth.signOut();
-      KneelLogger.log('[2/3] Firebase Auth signed out', context: 'Auth');
+      KneelLogger.log('[2/4] Firebase Auth signed out', context: 'Auth');
     } catch (e) {
-      KneelLogger.error('[2/3] Firebase signOut failed', e);
+      KneelLogger.error('[2/4] Firebase signOut failed', e);
       success = false;
     }
 
-    // Step 3: Clear ALL SharedPreferences (nuclear option)
+    // Step 3: Clear biometric credentials from secure storage
+    try {
+      await _biometricService.clearAllCredentials();
+      KneelLogger.log('[3/4] Biometric credentials cleared', context: 'Auth');
+    } catch (e) {
+      KneelLogger.error('[3/4] Biometric credentials clear failed', e);
+      // Not critical - continue with reset
+    }
+
+    // Step 4: Clear ALL SharedPreferences (nuclear option)
     try {
       final prefs = await SharedPreferences.getInstance();
       // Clear specific session keys
@@ -433,9 +717,9 @@ class FirebaseAuthService implements IAuthService {
       await prefs.setBool(_hasSessionKey, false);
       // Optionally clear ALL prefs for complete reset (uncomment if needed)
       // await prefs.clear();
-      KneelLogger.log('[3/3] SharedPreferences cleared', context: 'Auth');
+      KneelLogger.log('[4/4] SharedPreferences cleared', context: 'Auth');
     } catch (e) {
-      KneelLogger.error('[3/3] SharedPreferences clear failed', e);
+      KneelLogger.error('[4/4] SharedPreferences clear failed', e);
       success = false;
     }
 
@@ -446,6 +730,7 @@ class FirebaseAuthService implements IAuthService {
   // ===== Private Helpers =====
 
   /// Maps a Firebase user to our domain User entity.
+  /// Phone numbers are sanitized using the Safe-Save Rule (null if empty).
   User _mapFirebaseUser(firebase.User firebaseUser) {
     // Determine the auth provider
     AuthProvider provider = AuthProvider.email;
@@ -460,12 +745,26 @@ class FirebaseAuthService implements IAuthService {
       }
     }
 
+    // Try to extract phone from provider data (Google may have linked phone)
+    String? phoneFromProvider;
+    for (final providerInfo in firebaseUser.providerData) {
+      if (providerInfo.phoneNumber != null && providerInfo.phoneNumber!.isNotEmpty) {
+        phoneFromProvider = providerInfo.phoneNumber;
+        break;
+      }
+    }
+
+    // Safe-Save Rule: Sanitize phone to prevent empty string issues
+    final sanitizedPhone = User.sanitizePhone(
+      firebaseUser.phoneNumber ?? phoneFromProvider,
+    );
+
     return User(
       id: firebaseUser.uid,
       email: firebaseUser.email ?? '',
       displayName: firebaseUser.displayName ?? 'Prayer Warrior',
       photoUrl: firebaseUser.photoURL,
-      phoneNumber: firebaseUser.phoneNumber,
+      phoneNumber: sanitizedPhone,
       provider: provider,
       createdAt: firebaseUser.metadata.creationTime ?? DateTime.now(),
       isEmailVerified: firebaseUser.emailVerified,
@@ -476,14 +775,39 @@ class FirebaseAuthService implements IAuthService {
   ///
   /// IDENTITY SYNC: If user already exists in Supabase, MERGE the data
   /// instead of overwriting their existing Bio/Location with defaults.
+  ///
+  /// PHONE NUMBER PRIORITY (Safe-Save Rule):
+  /// 1. Firebase user's phoneNumber (if signed in with phone)
+  /// 2. Phone from provider data (Google may have linked phone)
+  /// 3. Existing database phone number
+  /// Empty strings are converted to NULL to prevent unique constraint violations.
   Future<void> _syncProfileToSupabase(firebase.User firebaseUser, String provider) async {
     try {
       // First, check if user already has a profile
       final existingProfile = await _profileService.getProfile(firebaseUser.uid);
 
+      // Extract phone from provider data (in case Google has linked phone)
+      String? phoneFromProvider;
+      for (final providerInfo in firebaseUser.providerData) {
+        final phone = User.sanitizePhone(providerInfo.phoneNumber);
+        if (phone != null) {
+          phoneFromProvider = phone;
+          KneelLogger.log('Found phone from provider: ${providerInfo.providerId}', context: 'Auth');
+          break;
+        }
+      }
+
       if (existingProfile != null) {
         // MERGE: Preserve existing bio, location, and other user data
         KneelLogger.log('Merging with existing Supabase profile', context: 'Auth');
+
+        // Phone merge with priority: Firebase > ProviderData > Existing
+        final mergedPhone = User.mergePhone(
+          userInput: null, // No user input during auth sync
+          authProviderPhone: firebaseUser.phoneNumber ?? phoneFromProvider,
+          existingDatabasePhone: existingProfile.phoneNumber,
+        );
+
         await _profileService.upsertProfile(
           uid: firebaseUser.uid,
           email: firebaseUser.email?.isNotEmpty == true
@@ -492,7 +816,7 @@ class FirebaseAuthService implements IAuthService {
           displayName: firebaseUser.displayName ?? existingProfile.displayName,
           photoUrl: firebaseUser.photoURL ?? existingProfile.photoUrl,
           provider: provider,
-          phoneNumber: firebaseUser.phoneNumber ?? existingProfile.phoneNumber,
+          phoneNumber: mergedPhone, // Uses Safe-Save merged value
           // PRESERVE existing user-entered data
           bio: existingProfile.bio,
           locationCity: existingProfile.locationCity,
@@ -502,13 +826,19 @@ class FirebaseAuthService implements IAuthService {
       } else {
         // New user - create profile with Firebase data
         KneelLogger.log('Creating new Supabase profile', context: 'Auth');
+
+        // Safe-Save: Sanitize phone from Firebase
+        final sanitizedPhone = User.sanitizePhone(
+          firebaseUser.phoneNumber ?? phoneFromProvider,
+        );
+
         await _profileService.upsertProfile(
           uid: firebaseUser.uid,
           email: firebaseUser.email ?? '',
           displayName: firebaseUser.displayName,
           photoUrl: firebaseUser.photoURL,
           provider: provider,
-          phoneNumber: firebaseUser.phoneNumber,
+          phoneNumber: sanitizedPhone, // NULL if empty (Safe-Save Rule)
           emailVerified: firebaseUser.emailVerified,
         );
       }

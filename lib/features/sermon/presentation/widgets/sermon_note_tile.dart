@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
@@ -166,7 +167,7 @@ class SermonNoteTile extends StatelessWidget {
               if (note.content.isNotEmpty) ...[
                 const SizedBox(height: 10),
                 Text(
-                  note.content,
+                  _extractPreviewText(note.content),
                   style: GoogleFonts.inter(
                     fontSize: 14,
                     color: isDark ? Colors.white54 : Colors.black54,
@@ -291,5 +292,34 @@ class SermonNoteTile extends StatelessWidget {
       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
     ];
     return '${months[date.month - 1]} ${date.day}, ${date.year}';
+  }
+
+  /// Extracts plain text preview from content (handles JSON Delta format).
+  String _extractPreviewText(String content) {
+    if (content.isEmpty) return '';
+
+    // Check if it's JSON (Quill Delta format)
+    if (content.startsWith('[')) {
+      try {
+        final sanitized = content.replaceAll(
+          RegExp(r'[\x00-\x08\x0B\x0C\x0E-\x1F]'),
+          '',
+        );
+        final delta = jsonDecode(sanitized) as List<dynamic>;
+        final buffer = StringBuffer();
+        for (final op in delta) {
+          if (op is Map && op['insert'] is String) {
+            buffer.write(op['insert']);
+          }
+        }
+        final text = buffer.toString().trim();
+        final lines = text.split('\n').where((l) => l.trim().isNotEmpty);
+        return lines.isNotEmpty ? lines.first : '';
+      } catch (_) {
+        return '';
+      }
+    }
+
+    return content.split('\n').first.trim();
   }
 }

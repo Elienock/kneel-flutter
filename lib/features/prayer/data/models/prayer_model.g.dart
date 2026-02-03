@@ -33,13 +33,15 @@ class PrayerModelAdapter extends TypeAdapter<PrayerModel> {
       tags: (fields[11] as List).cast<String>(),
       testimony: fields[12] as String?,
       scriptureReference: fields[13] as String?,
+      testimonyImageUrl: fields[16] as String?,
+      isPublicTestimony: fields[17] == null ? false : fields[17] as bool,
     );
   }
 
   @override
   void write(BinaryWriter writer, PrayerModel obj) {
     writer
-      ..writeByte(16)
+      ..writeByte(18)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -71,7 +73,11 @@ class PrayerModelAdapter extends TypeAdapter<PrayerModel> {
       ..writeByte(14)
       ..write(obj.lastPrayedAt)
       ..writeByte(15)
-      ..write(obj.isLocked);
+      ..write(obj.isLocked)
+      ..writeByte(16)
+      ..write(obj.testimonyImageUrl)
+      ..writeByte(17)
+      ..write(obj.isPublicTestimony);
   }
 
   @override

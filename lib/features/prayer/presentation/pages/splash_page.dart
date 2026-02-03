@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:lucide_icons/lucide_icons.dart';
 import 'package:quick_church/core/theme/app_theme.dart';
+import 'package:quick_church/core/widgets/kneel_logo.dart';
 
 /// Custom splash screen with "Kneel" branding and "from Claudine Tech" footer.
 class SplashPage extends StatelessWidget {
@@ -24,12 +24,9 @@ class SplashPage extends StatelessWidget {
             Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // App Icon
+                // Official Kneel Logo - Light variant pops on purple splash background
                 Container(
-                  width: 100,
-                  height: 100,
                   decoration: BoxDecoration(
-                    color: Colors.white,
                     borderRadius: BorderRadius.circular(24),
                     boxShadow: [
                       BoxShadow(
@@ -41,20 +38,7 @@ class SplashPage extends StatelessWidget {
                   ),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(24),
-                    child: Image.asset(
-                      'assets/icon/app_icon.png',
-                      width: 100,
-                      height: 100,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        // Fallback to heart icon if image fails
-                        return const Icon(
-                          LucideIcons.heart,
-                          size: 50,
-                          color: AppTheme.primaryColor,
-                        );
-                      },
-                    ),
+                    child: KneelLogo.light(height: 120),
                   ),
                 ),
                 const SizedBox(height: 24),

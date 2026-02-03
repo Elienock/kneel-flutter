@@ -1,5 +1,6 @@
 import 'package:quick_church/core/error/failures.dart';
 import 'package:quick_church/features/prayer/domain/entities/prayer.dart';
+import 'package:quick_church/features/prayer/domain/entities/prayer_session.dart';
 
 /// Abstract repository interface for Prayer operations.
 ///
@@ -70,4 +71,37 @@ abstract class IPrayerRepository {
   ///
   /// Returns the updated [Prayer] on success or a [Failure] on error.
   Future<({Prayer? data, Failure? failure})> toggleLock(String id);
+
+  // ============================================================================
+  // PRAYER PERSISTENCE / SESSION LOGGING
+  // ============================================================================
+
+  /// Records a prayer session for a specific prayer (from Sacred Time or manual).
+  /// This increments the prayer's times_prayed counter and logs the session.
+  ///
+  /// Returns the updated [Prayer] with new count on success or a [Failure] on error.
+  Future<({Prayer? data, Failure? failure})> recordPrayerSession({
+    required String prayerId,
+    required int durationMinutes,
+    int? actualDurationSeconds,
+    DateTime? prayedAt,
+    bool isManual = false,
+    String? notes,
+  });
+
+  /// Gets the prayer history (all sessions) for a specific prayer.
+  ///
+  /// Returns a [List<PrayerSession>] on success or a [Failure] on error.
+  Future<({List<PrayerSession>? data, Failure? failure})> getPrayerHistory(
+    String prayerId, {
+    int limit = 20,
+    int offset = 0,
+  });
+
+  /// Gets persistence stats for a prayer (total sessions, total time, etc.).
+  ///
+  /// Returns a Map with stats on success or a [Failure] on error.
+  Future<({Map<String, dynamic>? data, Failure? failure})> getPrayerPersistenceStats(
+    String prayerId,
+  );
 }

@@ -1,0 +1,236 @@
+-- Prayer Persistence Tracking Schema
+-- Tracks individual prayer sessions for persistence (Luke 18:1 - "pray and not give up")
+-- This enables the "Prayed 12x" badges and feeds into the Insights heatmap
+
+-- ============================================================================
+-- PRAYER LOGS TABLE
+-- Tracks every time a user prays for a specific prayer request
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS prayer_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  prayer_id UUID NOT NULL,
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  duration_minutes INTEGER NOT NULL DEFAULT 1,
+  actual_duration_seconds INTEGER,
+  prayed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  is_manual BOOLEAN NOT NULL DEFAULT FALSE,
+  notes TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+  -- Index for efficient prayer-specific queries
+  CONSTRAINT fk_prayer FOREIGN KEY (prayer_id)
+    REFERENCES prayers(id) ON DELETE CASCADE
+);
+
+-- Indexes for common query patterns
+CREATE INDEX IF NOT EXISTS idx_prayer_logs_prayer_id ON prayer_logs(prayer_id);
+CREATE INDEX IF NOT EXISTS idx_prayer_logs_user_id ON prayer_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_prayer_logs_prayed_at ON prayer_logs(prayed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_prayer_logs_user_prayer ON prayer_logs(user_id, prayer_id);
+
+-- Enable RLS
+ALTER TABLE prayer_logs ENABLE ROW LEVEL SECURITY;
+
+-- RLS Policies
+CREATE POLICY "Users can view own prayer logs"
+  ON prayer_logs FOR SELECT
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own prayer logs"
+  ON prayer_logs FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own prayer logs"
+  ON prayer_logs FOR UPDATE
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own prayer logs"
+  ON prayer_logs FOR DELETE
+  USING (auth.uid() = user_id);
+
+-- ============================================================================
+-- UPDATE PRAYERS TABLE
+-- Add times_prayed counter (denormalized for performance)
+-- ============================================================================
+
+-- Add times_prayed column if it doesn't exist
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'prayers' AND column_name = 'times_prayed'
+  ) THEN
+    ALTER TABLE prayers ADD COLUMN times_prayed INTEGER NOT NULL DEFAULT 0;
+  END IF;
+END $$;
+
+-- ============================================================================
+-- FUNCTIONS
+-- ============================================================================
+
+-- Function to record a prayer session and update the prayer's times_prayed counter
+CREATE OR REPLACE FUNCTION record_prayer_session(
+  p_prayer_id UUID,
+  p_user_id UUID,
+  p_duration_minutes INTEGER,
+  p_actual_duration_seconds INTEGER DEFAULT NULL,
+  p_is_manual BOOLEAN DEFAULT FALSE,
+  p_notes TEXT DEFAULT NULL,
+  p_prayed_at TIMESTAMPTZ DEFAULT NOW()
+)
+RETURNS JSON
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_log_id UUID;
+  v_new_count INTEGER;
+  v_prayer RECORD;
+BEGIN
+  -- Verify the prayer exists and belongs to the user
+  SELECT * INTO v_prayer
+  FROM prayers
+  WHERE id = p_prayer_id AND user_id = p_user_id;
+
+  IF v_prayer IS NULL THEN
+    RAISE EXCEPTION 'Prayer not found or access denied';
+  END IF;
+
+  -- Insert the prayer log
+  INSERT INTO prayer_logs (
+    prayer_id, user_id, duration_minutes, actual_duration_seconds,
+    prayed_at, is_manual, notes
+  ) VALUES (
+    p_prayer_id, p_user_id, p_duration_minutes, p_actual_duration_seconds,
+    p_prayed_at, p_is_manual, p_notes
+  )
+  RETURNING id INTO v_log_id;
+
+  -- Increment the times_prayed counter
+  UPDATE prayers
+  SET
+    times_prayed = times_prayed + 1,
+    last_prayed_at = p_prayed_at,
+    updated_at = NOW()
+  WHERE id = p_prayer_id
+  RETURNING times_prayed INTO v_new_count;
+
+  -- Also record in user_sessions for Insights integration
+  INSERT INTO user_sessions (
+    user_id,
+    session_type,
+    duration_minutes,
+    actual_duration_seconds,
+    completed,
+    note_id,
+    created_at
+  ) VALUES (
+    p_user_id,
+    'prayer',
+    p_duration_minutes,
+    p_actual_duration_seconds,
+    TRUE,
+    v_log_id::TEXT,
+    p_prayed_at
+  );
+
+  RETURN json_build_object(
+    'log_id', v_log_id,
+    'times_prayed', v_new_count,
+    'prayer_title', v_prayer.title
+  );
+END;
+$$;
+
+-- Function to get prayer session history for a specific prayer
+CREATE OR REPLACE FUNCTION get_prayer_history(
+  p_prayer_id UUID,
+  p_user_id UUID,
+  p_limit INTEGER DEFAULT 20,
+  p_offset INTEGER DEFAULT 0
+)
+RETURNS TABLE (
+  id UUID,
+  duration_minutes INTEGER,
+  actual_duration_seconds INTEGER,
+  prayed_at TIMESTAMPTZ,
+  is_manual BOOLEAN,
+  notes TEXT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    pl.id,
+    pl.duration_minutes,
+    pl.actual_duration_seconds,
+    pl.prayed_at,
+    pl.is_manual,
+    pl.notes
+  FROM prayer_logs pl
+  WHERE pl.prayer_id = p_prayer_id
+    AND pl.user_id = p_user_id
+  ORDER BY pl.prayed_at DESC
+  LIMIT p_limit
+  OFFSET p_offset;
+END;
+$$;
+
+-- Function to get persistence stats for a prayer
+CREATE OR REPLACE FUNCTION get_prayer_persistence_stats(
+  p_prayer_id UUID,
+  p_user_id UUID
+)
+RETURNS JSON
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_total_sessions INTEGER;
+  v_total_minutes INTEGER;
+  v_manual_count INTEGER;
+  v_first_prayed TIMESTAMPTZ;
+  v_last_prayed TIMESTAMPTZ;
+  v_longest_session INTEGER;
+BEGIN
+  SELECT
+    COUNT(*)::INTEGER,
+    COALESCE(SUM(duration_minutes), 0)::INTEGER,
+    COUNT(*) FILTER (WHERE is_manual)::INTEGER,
+    MIN(prayed_at),
+    MAX(prayed_at),
+    COALESCE(MAX(duration_minutes), 0)::INTEGER
+  INTO
+    v_total_sessions, v_total_minutes, v_manual_count,
+    v_first_prayed, v_last_prayed, v_longest_session
+  FROM prayer_logs
+  WHERE prayer_id = p_prayer_id AND user_id = p_user_id;
+
+  RETURN json_build_object(
+    'total_sessions', v_total_sessions,
+    'total_minutes', v_total_minutes,
+    'manual_sessions', v_manual_count,
+    'timed_sessions', v_total_sessions - v_manual_count,
+    'first_prayed', v_first_prayed,
+    'last_prayed', v_last_prayed,
+    'longest_session_minutes', v_longest_session,
+    'days_praying', CASE
+      WHEN v_first_prayed IS NOT NULL AND v_last_prayed IS NOT NULL
+      THEN EXTRACT(DAY FROM v_last_prayed - v_first_prayed)::INTEGER + 1
+      ELSE 0
+    END
+  );
+END;
+$$;
+
+-- ============================================================================
+-- GRANT PERMISSIONS
+-- ============================================================================
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON prayer_logs TO authenticated;
+GRANT EXECUTE ON FUNCTION record_prayer_session TO authenticated;
+GRANT EXECUTE ON FUNCTION get_prayer_history TO authenticated;
+GRANT EXECUTE ON FUNCTION get_prayer_persistence_stats TO authenticated;

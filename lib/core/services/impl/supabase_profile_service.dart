@@ -86,13 +86,19 @@ class SupabaseProfileService implements IProfileService {
     bool? emailVerified,
   }) async {
     try {
-      final data = {
+      // CRITICAL: Sanitize phone number to prevent unique constraint violations
+      // Empty strings ("") cause 23505 errors because they're treated as duplicate values
+      String? sanitizedPhone = phoneNumber?.trim();
+      if (sanitizedPhone != null && sanitizedPhone.isEmpty) {
+        sanitizedPhone = null; // Convert empty string to null
+      }
+
+      final data = <String, dynamic>{
         'id': uid,
         'email': email,
         'display_name': displayName ?? 'Prayer Warrior',
         'photo_url': photoUrl,
         'provider': provider,
-        'phone_number': phoneNumber,
         'bio': bio ?? 'I am Holy and consecrated to GOD',
         'location_city': locationCity,
         'google_place_id': googlePlaceId,
@@ -100,8 +106,21 @@ class SupabaseProfileService implements IProfileService {
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       };
 
-      // Remove null values to avoid overwriting existing data
+      // Only include phone_number if it has a real value
+      // This prevents unique constraint violations on empty strings
+      if (sanitizedPhone != null) {
+        data['phone_number'] = sanitizedPhone;
+      }
+      // NOTE: We don't include phone_number at all if null - this lets Supabase keep existing value
+
+      // Remove null values to avoid overwriting existing data (but keep id and email)
       data.removeWhere((key, value) => value == null && key != 'id' && key != 'email');
+
+      // Debug logging to verify what we're sending
+      KneelLogger.log(
+        'Upserting profile: phone_number=${sanitizedPhone ?? "NOT_INCLUDED"}',
+        context: 'SupabaseProfileService',
+      );
 
       final response = await _client
           .from('profiles')

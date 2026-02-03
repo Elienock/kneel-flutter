@@ -4,6 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:quick_church/core/l10n/app_strings.dart';
 import 'package:quick_church/core/theme/app_theme.dart';
+import 'package:quick_church/core/widgets/kneel_logo.dart';
 import 'package:quick_church/features/auth/presentation/bloc/auth_cubit.dart';
 import 'package:quick_church/features/auth/presentation/bloc/auth_state.dart';
 import 'package:quick_church/features/auth/presentation/pages/phone_auth_page.dart';
@@ -21,24 +22,23 @@ class AuthPage extends StatefulWidget {
 }
 
 class _AuthPageState extends State<AuthPage> {
-  bool _biometricAvailable = false;
-  bool _hasPreviousSession = false;
+  bool _biometricLoginEnabled = false;
 
   @override
   void initState() {
     super.initState();
-    _checkBiometricAvailability();
+    _checkBiometricLoginStatus();
   }
 
-  Future<void> _checkBiometricAvailability() async {
+  /// Checks if biometric login is enabled with stored credentials.
+  /// The button only shows if biometrics are available AND credentials are stored.
+  Future<void> _checkBiometricLoginStatus() async {
     final authCubit = context.read<AuthCubit>();
-    final available = await authCubit.isBiometricAvailable();
-    final hasSession = await authCubit.hasPreviousSession();
+    final enabled = await authCubit.isBiometricLoginEnabled();
 
     if (mounted) {
       setState(() {
-        _biometricAvailable = available;
-        _hasPreviousSession = hasSession;
+        _biometricLoginEnabled = enabled;
       });
     }
   }
@@ -106,8 +106,8 @@ class _AuthPageState extends State<AuthPage> {
 
                 const SizedBox(height: 16),
 
-                // Biometric Button (only show if available AND user has logged in before)
-                if (_biometricAvailable && _hasPreviousSession)
+                // Biometric Button (only show if enabled with stored credentials)
+                if (_biometricLoginEnabled)
                   BiometricLoginButton(
                     onPressed: () => context.read<AuthCubit>().loginWithBiometrics(),
                     isLoading: isLoading,
@@ -140,27 +140,15 @@ class _AuthPageState extends State<AuthPage> {
   }
 
   Widget _buildLogo(BuildContext context) {
+    // Use dark background logo with elevation for the login page
+    // The purple container creates a professional 'brand container' effect
     return Column(
       children: [
-        Container(
-          width: 100,
-          height: 100,
-          decoration: BoxDecoration(
-            color: AppTheme.primaryColor,
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: [
-              BoxShadow(
-                color: AppTheme.primaryColor.withValues(alpha: 0.3),
-                blurRadius: 20,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          child: const Icon(
-            Icons.favorite,
-            color: Colors.white,
-            size: 48,
-          ),
+        KneelLogo.dark(
+          height: 120,
+          showElevation: true,
+          elevation: 12,
+          shadowColor: AppTheme.primaryColor.withValues(alpha: 0.4),
         ),
         const SizedBox(height: 16),
         Text(

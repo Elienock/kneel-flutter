@@ -11,6 +11,7 @@ import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 import 'package:quick_church/core/services/interfaces/i_auth_service.dart';
 import 'package:quick_church/core/services/interfaces/i_profile_service.dart';
 import 'package:quick_church/core/utils/kneel_logger.dart';
+import 'package:quick_church/features/auth/domain/entities/user.dart' show User;
 import 'package:quick_church/features/profile/domain/entities/profile.dart';
 import 'package:quick_church/features/profile/presentation/bloc/profile_state.dart';
 
@@ -33,6 +34,13 @@ class ProfileCubit extends Cubit<ProfileState> {
   /// Cached auth data for retry functionality
   _CachedAuthData? _cachedAuthData;
 
+  /// PRODUCTION STABILITY: Flag to prevent operations during critical transitions
+  /// Set to true during onboarding completion to prevent race conditions
+  bool _isInTransition = false;
+
+  /// Timestamp of last successful onboarding to prevent immediate re-triggering
+  DateTime? _lastOnboardingCompletion;
+
   ProfileCubit(this._profileService, this._authService) : super(const ProfileInitial());
 
   /// Loads or creates a profile for the given user.
@@ -40,6 +48,10 @@ class ProfileCubit extends Cubit<ProfileState> {
   ///
   /// On timeout/network error, emits [ProfileConnectionError] allowing retry.
   /// If profile cannot be created after retries, emits [ProfileNotFound] and triggers logout.
+  ///
+  /// PRODUCTION HARDENED:
+  /// - Respects transition flag to prevent race conditions after onboarding
+  /// - Skips reload if profile was just completed
   Future<void> loadProfile({
     required String uid,
     required String email,
@@ -49,6 +61,24 @@ class ProfileCubit extends Cubit<ProfileState> {
     String? phoneNumber,
     bool? emailVerified,
   }) async {
+    // GUARD: Don't reload during transition (prevents race condition)
+    if (_isInTransition) {
+      KneelLogger.warn('loadProfile blocked - transition in progress', context: 'Profile');
+      return;
+    }
+
+    // GUARD: Don't reload immediately after onboarding completion
+    if (_lastOnboardingCompletion != null) {
+      final elapsed = DateTime.now().difference(_lastOnboardingCompletion!);
+      if (elapsed.inSeconds < 3) {
+        KneelLogger.warn(
+          'loadProfile blocked - onboarding just completed ${elapsed.inMilliseconds}ms ago',
+          context: 'Profile',
+        );
+        return;
+      }
+    }
+
     KneelLogger.log('Loading profile for $uid', context: 'Profile');
 
     emit(const ProfileLoading());
@@ -129,6 +159,9 @@ class ProfileCubit extends Cubit<ProfileState> {
         // Create new profile if doesn't exist
         KneelLogger.log('Creating new profile...', context: 'Profile');
 
+        // Safe-Save Rule: Sanitize phone number for new profile
+        final sanitizedPhone = User.sanitizePhone(phoneNumber);
+
         try {
           profile = await _profileService.upsertProfile(
             uid: uid,
@@ -136,7 +169,7 @@ class ProfileCubit extends Cubit<ProfileState> {
             displayName: displayName,
             photoUrl: photoUrl,
             provider: provider,
-            phoneNumber: phoneNumber,
+            phoneNumber: sanitizedPhone, // NULL if empty (Safe-Save Rule)
             emailVerified: emailVerified,
           ).timeout(_profileTimeout);
 
@@ -166,13 +199,23 @@ class ProfileCubit extends Cubit<ProfileState> {
         // Update existing profile with latest auth data
         // IMPORTANT: Preserve existing bio, location, and googlePlaceId (Identity Sync)
         KneelLogger.log('Merging with existing profile (preserving bio/location)...', context: 'Profile');
+
+        // PHONE MERGE with Safe-Save Rule:
+        // Priority: authProviderPhone > existingDatabasePhone
+        // Empty strings are converted to NULL to prevent unique constraint violations
+        final mergedPhone = User.mergePhone(
+          userInput: null, // No user input during profile load
+          authProviderPhone: phoneNumber, // Phone from auth provider (Firebase/Google)
+          existingDatabasePhone: existingProfile.phoneNumber,
+        );
+
         profile = await _profileService.upsertProfile(
           uid: uid,
           email: email.isNotEmpty ? email : existingProfile.email,
           displayName: displayName ?? existingProfile.displayName,
           photoUrl: photoUrl ?? existingProfile.photoUrl,
           provider: provider ?? existingProfile.provider,
-          phoneNumber: phoneNumber ?? existingProfile.phoneNumber,
+          phoneNumber: mergedPhone, // Uses Safe-Save merged value (NULL if empty)
           emailVerified: emailVerified ?? existingProfile.emailVerified,
           // MERGE: Keep existing user data, don't overwrite with defaults
           bio: existingProfile.bio,
@@ -320,18 +363,36 @@ class ProfileCubit extends Cubit<ProfileState> {
 
   /// Syncs email verification status from Firebase to Supabase.
   /// Call this after user verifies their email.
+  ///
+  /// PRODUCTION HARDENED:
+  /// - Returns early if Firebase user is null (prevents user-not-found errors)
+  /// - Catches user-not-found specifically and triggers self-healing
   Future<bool> syncEmailVerificationStatus() async {
-    if (_currentUserId == null) return false;
+    // Guard 1: No cached user ID
+    if (_currentUserId == null) {
+      KneelLogger.warn('syncEmailVerificationStatus: No current user ID', context: 'Profile');
+      return false;
+    }
+
+    // Guard 2: Firebase user is null - return early, do NOT attempt reload
+    final firebaseUser = firebase.FirebaseAuth.instance.currentUser;
+    if (firebaseUser == null) {
+      KneelLogger.warn('syncEmailVerificationStatus: Firebase user is null - skipping sync', context: 'Profile');
+      return false;
+    }
 
     try {
       // Reload Firebase user to get latest verification status
-      final firebaseUser = firebase.FirebaseAuth.instance.currentUser;
-      if (firebaseUser == null) return false;
-
       await firebaseUser.reload();
       final reloadedUser = firebase.FirebaseAuth.instance.currentUser;
 
-      if (reloadedUser != null && reloadedUser.emailVerified) {
+      // Guard 3: User became null after reload (edge case)
+      if (reloadedUser == null) {
+        KneelLogger.warn('syncEmailVerificationStatus: User null after reload', context: 'Profile');
+        return false;
+      }
+
+      if (reloadedUser.emailVerified) {
         // Update Supabase profile
         final updatedProfile = await _profileService.markEmailVerified(_currentUserId!);
         emit(ProfileLoaded(updatedProfile));
@@ -340,18 +401,46 @@ class ProfileCubit extends Cubit<ProfileState> {
       }
 
       return false;
+    } on firebase.FirebaseAuthException catch (e) {
+      // SELF-HEAL: Specific handling for user-not-found
+      if (e.code == 'user-not-found' || e.code == 'user-token-expired') {
+        KneelLogger.warn(
+          'syncEmailVerificationStatus: ${e.code} - triggering self-heal',
+          context: 'Profile',
+        );
+        // Clean up zombie session gracefully
+        await forceLogoutAndClearAllData();
+        return false;
+      }
+      KneelLogger.error('ProfileCubit.syncEmailVerificationStatus', e);
+      return false;
     } catch (e) {
+      // Check for user-not-found in generic exceptions
+      final errorStr = e.toString().toLowerCase();
+      if (errorStr.contains('user-not-found') || errorStr.contains('user not found')) {
+        KneelLogger.warn(
+          'syncEmailVerificationStatus: user-not-found detected - triggering self-heal',
+          context: 'Profile',
+        );
+        await forceLogoutAndClearAllData();
+        return false;
+      }
       KneelLogger.error('ProfileCubit.syncEmailVerificationStatus', e);
       return false;
     }
   }
 
   /// Sends email verification and returns success status.
+  ///
+  /// PRODUCTION HARDENED:
+  /// - Returns false instead of throwing if no user (graceful degradation)
+  /// - Catches user-not-found errors and triggers self-healing
   Future<bool> resendEmailVerification() async {
     try {
       final firebaseUser = firebase.FirebaseAuth.instance.currentUser;
       if (firebaseUser == null) {
-        throw Exception('No user signed in');
+        KneelLogger.warn('resendEmailVerification: No Firebase user', context: 'Profile');
+        return false; // Graceful degradation instead of throwing
       }
       if (firebaseUser.emailVerified) {
         // Already verified - sync to Supabase
@@ -362,6 +451,15 @@ class ProfileCubit extends Cubit<ProfileState> {
       await firebaseUser.sendEmailVerification();
       KneelLogger.log('Verification email sent', context: 'Profile');
       return true;
+    } on firebase.FirebaseAuthException catch (e) {
+      // SELF-HEAL: Handle user-not-found gracefully
+      if (e.code == 'user-not-found' || e.code == 'user-token-expired') {
+        KneelLogger.warn('resendEmailVerification: ${e.code} - triggering self-heal', context: 'Profile');
+        await forceLogoutAndClearAllData();
+        return false;
+      }
+      KneelLogger.error('ProfileCubit.resendEmailVerification', e);
+      rethrow;
     } catch (e) {
       KneelLogger.error('ProfileCubit.resendEmailVerification', e);
       rethrow;
@@ -392,6 +490,11 @@ class ProfileCubit extends Cubit<ProfileState> {
   /// Performs an upsert on the profiles table with bio, location, and display name.
   /// Validates data BEFORE and AFTER the upsert to ensure atomicity.
   ///
+  /// PRODUCTION HARDENED:
+  /// - Uses transition flag to prevent race conditions
+  /// - Tracks completion timestamp to prevent double-triggers
+  /// - Validates Firebase session before proceeding
+  ///
   /// If the Supabase upsert fails, the user will NOT proceed to Home.
   Future<void> completeOnboarding({
     required String displayName,
@@ -400,6 +503,21 @@ class ProfileCubit extends Cubit<ProfileState> {
     required String googlePlaceId,
     String? photoUrl,
   }) async {
+    // GUARD: Prevent double-completion within 2 seconds
+    if (_lastOnboardingCompletion != null) {
+      final elapsed = DateTime.now().difference(_lastOnboardingCompletion!);
+      if (elapsed.inSeconds < 2) {
+        KneelLogger.warn('Onboarding completion blocked - too soon after last completion', context: 'Profile');
+        return;
+      }
+    }
+
+    // GUARD: Prevent operations during transition
+    if (_isInTransition) {
+      KneelLogger.warn('Onboarding completion blocked - transition in progress', context: 'Profile');
+      return;
+    }
+
     final currentState = state;
     Profile? currentProfile;
 
@@ -411,6 +529,15 @@ class ProfileCubit extends Cubit<ProfileState> {
 
     if (currentProfile == null || _currentUserId == null) {
       emit(const ProfileError('No profile to update'));
+      return;
+    }
+
+    // CRITICAL: Verify Firebase session is still valid before proceeding
+    final firebaseUser = firebase.FirebaseAuth.instance.currentUser;
+    if (firebaseUser == null || firebaseUser.uid != _currentUserId) {
+      KneelLogger.warn('Firebase session invalid during onboarding - aborting', context: 'Profile');
+      emit(const ProfileError('Session expired. Please sign in again.'));
+      await _handleUserNotFound(_currentUserId!, 'Firebase session invalid during onboarding');
       return;
     }
 
@@ -426,9 +553,14 @@ class ProfileCubit extends Cubit<ProfileState> {
       return;
     }
 
+    // Set transition flag
+    _isInTransition = true;
     emit(ProfileUpdating(currentProfile));
 
     try {
+      // Safe-Save Rule: Sanitize phone number before upsert
+      final sanitizedPhone = User.sanitizePhone(currentProfile.phoneNumber);
+
       // ATOMIC UPSERT: Ensure all data is saved atomically
       final updatedProfile = await _profileService.upsertProfile(
         uid: _currentUserId!,
@@ -436,7 +568,7 @@ class ProfileCubit extends Cubit<ProfileState> {
         displayName: displayName.trim(),
         photoUrl: photoUrl ?? currentProfile.photoUrl,
         provider: currentProfile.provider,
-        phoneNumber: currentProfile.phoneNumber,
+        phoneNumber: sanitizedPhone, // NULL if empty (Safe-Save Rule)
         bio: bio.trim(),
         locationCity: locationCity.trim(),
         googlePlaceId: googlePlaceId.trim(),
@@ -449,6 +581,7 @@ class ProfileCubit extends Cubit<ProfileState> {
         KneelLogger.error('ProfileCubit.completeOnboarding', 'Post-validation failed: $validationError');
         emit(ProfileError('Failed to save profile: $validationError'));
         emit(ProfileNeedsOnboarding(currentProfile));
+        _isInTransition = false;
         return;
       }
 
@@ -457,16 +590,26 @@ class ProfileCubit extends Cubit<ProfileState> {
         KneelLogger.error('ProfileCubit.completeOnboarding', 'Profile not complete after upsert');
         emit(const ProfileError('Profile data incomplete. Please try again.'));
         emit(ProfileNeedsOnboarding(currentProfile));
+        _isInTransition = false;
         return;
       }
 
+      // SUCCESS: Record completion time and emit loaded state
+      _lastOnboardingCompletion = DateTime.now();
       KneelLogger.log('Onboarding completed for: $_currentUserId', context: 'Profile');
       emit(ProfileLoaded(updatedProfile));
+
+      // Clear transition flag after a brief delay to allow UI to settle
+      Future.delayed(const Duration(milliseconds: 500), () {
+        _isInTransition = false;
+      });
     } on TimeoutException {
+      _isInTransition = false;
       KneelLogger.error('ProfileCubit.completeOnboarding', 'Timeout during onboarding');
       emit(const ProfileError('Connection timed out. Please try again.'));
       emit(ProfileNeedsOnboarding(currentProfile));
     } catch (e) {
+      _isInTransition = false;
       KneelLogger.error('ProfileCubit.completeOnboarding', e);
       emit(ProfileError(e.toString()));
       // CRITICAL: Do NOT proceed to Home on failure - stay on onboarding
@@ -769,6 +912,8 @@ class ProfileCubit extends Cubit<ProfileState> {
     _currentUserId = null;
     _cachedAuthData = null;
     _creationRetryCount = 0;
+    _isInTransition = false;
+    _lastOnboardingCompletion = null;
     emit(const ProfileInitial());
   }
 

@@ -10,6 +10,7 @@ import 'package:quick_church/core/services/app_lifecycle_observer.dart';
 import 'package:quick_church/core/services/interfaces/i_biometric_service.dart';
 import 'package:quick_church/core/theme/app_theme.dart';
 import 'package:quick_church/core/utils/kneel_logger.dart';
+import 'package:quick_church/core/widgets/kneel_logo.dart';
 import 'package:quick_church/features/auth/presentation/bloc/auth_cubit.dart';
 import 'package:quick_church/features/auth/presentation/bloc/auth_state.dart';
 import 'package:quick_church/features/auth/presentation/pages/auth_page.dart';
@@ -22,6 +23,7 @@ import 'package:quick_church/features/profile/presentation/bloc/language_cubit.d
 import 'package:quick_church/features/profile/presentation/bloc/profile_cubit.dart';
 import 'package:quick_church/features/profile/presentation/bloc/profile_state.dart';
 import 'package:quick_church/features/sermon/presentation/bloc/sermon_cubit.dart';
+import 'package:quick_church/features/insights/presentation/bloc/insights_cubit.dart';
 import 'package:quick_church/injection.dart';
 
 void main() async {
@@ -119,6 +121,9 @@ class _KneelAppState extends State<KneelApp> {
         BlocProvider(
           create: (_) => getIt<SermonCubit>()..loadSermons(),
         ),
+        BlocProvider(
+          create: (_) => getIt<InsightsCubit>(),
+        ),
       ],
       child: BlocBuilder<LanguageCubit, Locale>(
         builder: (context, locale) {
@@ -190,6 +195,8 @@ class _AuthGateState extends State<_AuthGate> {
 
   /// Checks auth state on mount - handles case where Authenticated was emitted
   /// before this widget's BlocListener was active (e.g., during splash screen)
+  ///
+  /// PRODUCTION HARDENED: Uses mounted check and microtask for stability
   void _checkInitialAuthState() {
     final authState = context.read<AuthCubit>().state;
     KneelLogger.log('initState check - authState is ${authState.runtimeType}', context: 'SmartRouter');
@@ -198,15 +205,19 @@ class _AuthGateState extends State<_AuthGate> {
       _profileLoadTriggered = true;
       final user = authState.user;
       KneelLogger.log('Already authenticated! Triggering loadProfile for ${user.id}', context: 'SmartRouter');
-      context.read<ProfileCubit>().loadProfile(
-        uid: user.id,
-        email: user.email,
-        displayName: user.displayName,
-        photoUrl: user.photoUrl,
-        provider: user.provider.name,
-        phoneNumber: user.phoneNumber,
-        emailVerified: user.isEmailVerified,
-      );
+
+      // PRODUCTION STABILITY: Ensure context is still valid
+      if (mounted) {
+        context.read<ProfileCubit>().loadProfile(
+          uid: user.id,
+          email: user.email,
+          displayName: user.displayName,
+          photoUrl: user.photoUrl,
+          provider: user.provider.name,
+          phoneNumber: user.phoneNumber,
+          emailVerified: user.isEmailVerified,
+        );
+      }
     }
   }
 
@@ -216,6 +227,7 @@ class _AuthGateState extends State<_AuthGate> {
       listener: (context, authState) {
         // When user signs out, reset all flags
         if (authState is Unauthenticated || authState is AuthInitial) {
+          KneelLogger.log('Auth state: ${authState.runtimeType} - resetting SmartRouter', context: 'SmartRouter');
           _profileLoadTriggered = false;
           _biometricVerified = false;
           _checkingBiometric = false;
@@ -227,15 +239,22 @@ class _AuthGateState extends State<_AuthGate> {
           _profileLoadTriggered = true;
           final user = authState.user;
           KneelLogger.log('Auth state changed to Authenticated, loading profile for ${user.id}', context: 'SmartRouter');
-          context.read<ProfileCubit>().loadProfile(
-            uid: user.id,
-            email: user.email,
-            displayName: user.displayName,
-            photoUrl: user.photoUrl,
-            provider: user.provider.name,
-            phoneNumber: user.phoneNumber,
-            emailVerified: user.isEmailVerified,
-          );
+
+          // PRODUCTION STABILITY: Small delay to ensure state is stable
+          // This prevents race conditions during rapid auth state changes
+          Future.microtask(() {
+            if (context.mounted) {
+              context.read<ProfileCubit>().loadProfile(
+                uid: user.id,
+                email: user.email,
+                displayName: user.displayName,
+                photoUrl: user.photoUrl,
+                provider: user.provider.name,
+                phoneNumber: user.phoneNumber,
+                emailVerified: user.isEmailVerified,
+              );
+            }
+          });
         }
       },
       child: BlocBuilder<AuthCubit, AuthState>(
@@ -304,24 +323,20 @@ class _AuthGateState extends State<_AuthGate> {
                       : (profileState as ProfileUpdating).currentProfile;
 
                   // STATE VALIDATION: Ensure critical fields are present
+                  // PRODUCTION FIX: Don't call loadProfile() again - causes race conditions
+                  // Instead, show onboarding directly if profile is incomplete
                   if (!profile.isProfileComplete) {
                     KneelLogger.warn(
-                      'Profile incomplete in ProfileLoaded state - redirecting to onboarding',
+                      'Profile incomplete in ProfileLoaded state - showing onboarding',
                       context: 'SmartRouter',
                     );
-                    // Force back to onboarding
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      context.read<ProfileCubit>().loadProfile(
-                        uid: profile.id,
-                        email: profile.email,
-                        displayName: profile.displayName,
-                        photoUrl: profile.photoUrl,
-                        provider: profile.provider,
-                        phoneNumber: profile.phoneNumber,
-                        emailVerified: profile.emailVerified,
-                      );
-                    });
-                    return const _BrandedLoadingScreen(message: 'Verifying profile...');
+                    // Show onboarding directly instead of reloading profile
+                    // This prevents the race condition where loadProfile() can trigger
+                    // a sign-out if Firebase session becomes invalid during transition
+                    return OnboardingPage(
+                      initialPhotoUrl: profile.photoUrl,
+                      initialDisplayName: profile.displayName,
+                    );
                   }
 
                   // Profile is valid - show Home
@@ -430,21 +445,16 @@ class _BrandedLoadingScreen extends StatelessWidget {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // Kneel Logo with animation (wrapped in RepaintBoundary)
+                    // Official Kneel Logo with animation (wrapped in RepaintBoundary)
+                    // Uses dark background variant with elevation for the loading screen
                     RepaintBoundary(
-                      child: TweenAnimationBuilder<double>(
-                        tween: Tween(begin: 0.0, end: 1.0),
-                        duration: const Duration(milliseconds: 600),
-                        builder: (context, value, child) {
-                          return Opacity(
-                            opacity: value,
-                            child: Transform.scale(
-                              scale: 0.8 + (0.2 * value),
-                              child: child,
-                            ),
-                          );
-                        },
-                        child: const _KneelLogo(),
+                      child: AnimatedKneelLogo(
+                        logo: KneelLogo.dark(
+                          height: 120,
+                          showElevation: true,
+                          elevation: 10,
+                          shadowColor: AppTheme.primaryColor.withValues(alpha: 0.35),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 32),
@@ -527,34 +537,6 @@ class _BrandedLoadingScreen extends StatelessWidget {
   }
 }
 
-/// Extracted Kneel logo for const optimization
-class _KneelLogo extends StatelessWidget {
-  const _KneelLogo();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 100,
-      height: 100,
-      decoration: BoxDecoration(
-        color: AppTheme.primaryColor,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: AppTheme.primaryColor.withValues(alpha: 0.3),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: const Icon(
-        Icons.favorite,
-        color: Colors.white,
-        size: 48,
-      ),
-    );
-  }
-}
 
 /// Connection error screen with retry button (for timeout/network issues).
 class _ConnectionErrorScreen extends StatelessWidget {

@@ -57,8 +57,9 @@ dependencies:
   # Modern Icons
   lucide_icons: ^0.257.0
 
-  # Secure Storage for PIN
+  # Secure Storage
   shared_preferences: ^2.2.2
+  flutter_secure_storage: ^9.2.2
 
   # Calendar for Faithfulness Tracking
   table_calendar: ^3.0.9
@@ -94,6 +95,21 @@ dependencies:
 
   # Premium animations
   animate_do: ^3.3.4
+
+  # Premium OTP input
+  pinput: ^5.0.0
+
+  # Rich Text Editor for Sermon Notes
+  flutter_quill: ^11.5.0
+
+  # Screen Wake Lock for Sacred Time sessions
+  wakelock_plus: ^1.2.8
+
+  # Staggered Grid (Masonry layout for Hall of Faith)
+  flutter_staggered_grid_view: ^0.7.0
+
+  # Path Provider for temp file storage
+  path_provider: ^2.1.2
 
 dev_dependencies:
   flutter_test:

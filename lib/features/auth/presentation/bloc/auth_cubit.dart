@@ -169,7 +169,7 @@ class AuthCubit extends Cubit<AuthState> {
 
   // ===== Biometric Authentication =====
 
-  /// Signs in with biometrics.
+  /// Signs in with biometrics using stored credentials.
   Future<void> loginWithBiometrics() async {
     try {
       emit(const AuthLoading());
@@ -181,14 +181,108 @@ class AuthCubit extends Cubit<AuthState> {
     }
   }
 
-  /// Checks if biometric authentication is available.
+  /// Checks if biometric authentication is available on device.
   Future<bool> isBiometricAvailable() async {
     return _authService.isBiometricAvailable();
   }
 
-  /// Checks if user has a previous session (for showing biometric option).
+  /// Checks if biometric login is enabled with stored credentials.
+  /// Use this to decide whether to show the biometric button on Start Page.
+  Future<bool> isBiometricLoginEnabled() async {
+    return _authService.isBiometricLoginEnabled();
+  }
+
+  /// Checks if user has a previous session (legacy check).
   Future<bool> hasPreviousSession() async {
     return _authService.hasPreviousSession();
+  }
+
+  /// Enables biometric re-authentication for the current user.
+  /// Shows biometric prompt to verify identity before storing credentials.
+  /// Returns true if enabled successfully.
+  Future<bool> enableBiometricLogin() async {
+    return _authService.enableBiometricLogin();
+  }
+
+  /// Disables biometric re-authentication.
+  /// Clears stored credentials from secure storage.
+  Future<void> disableBiometricLogin() async {
+    return _authService.disableBiometricLogin();
+  }
+
+  // ===== Phone Linking =====
+
+  /// Links a phone number to the current user's account.
+  Future<void> linkPhoneNumber({
+    required String phoneNumber,
+    required Function(String verificationId) onCodeSent,
+    required Function(String error) onVerificationFailed,
+    Function()? onLinkSuccess,
+  }) async {
+    try {
+      emit(const AuthLoading());
+      await _authService.linkPhoneNumber(
+        phoneNumber: phoneNumber,
+        onCodeSent: (verificationId) {
+          emit(const PhoneCodeSent());
+          onCodeSent(verificationId);
+        },
+        onVerificationFailed: (error) {
+          emit(AuthError(error));
+          onVerificationFailed(error);
+        },
+        onLinkSuccess: onLinkSuccess,
+      );
+    } catch (e) {
+      emit(AuthError(e.toString()));
+    }
+  }
+
+  /// Verifies OTP and links phone to current account.
+  Future<void> verifyAndLinkPhone({
+    required String verificationId,
+    required String smsCode,
+  }) async {
+    try {
+      emit(const AuthLoading());
+      await _authService.verifyAndLinkPhone(
+        verificationId: verificationId,
+        smsCode: smsCode,
+      );
+      // Refresh user state
+      final currentUser = _authService.getCurrentUser();
+      if (currentUser != null) {
+        emit(Authenticated(currentUser));
+      }
+    } catch (e) {
+      emit(AuthError(e.toString()));
+      emit(const PhoneCodeSent()); // Stay on OTP screen
+    }
+  }
+
+  // ===== Password Management =====
+
+  /// Updates the current user's password.
+  Future<bool> updatePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    try {
+      emit(const AuthLoading());
+      await _authService.updatePassword(
+        currentPassword: currentPassword,
+        newPassword: newPassword,
+      );
+      // Refresh user state
+      final currentUser = _authService.getCurrentUser();
+      if (currentUser != null) {
+        emit(Authenticated(currentUser));
+      }
+      return true;
+    } catch (e) {
+      emit(AuthError(e.toString()));
+      return false;
+    }
   }
 
   // ===== Session Management =====

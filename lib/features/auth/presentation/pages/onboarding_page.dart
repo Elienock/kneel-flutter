@@ -10,6 +10,8 @@ import 'package:shimmer/shimmer.dart';
 import 'package:quick_church/core/l10n/app_strings.dart';
 import 'package:quick_church/core/services/places_api_service.dart';
 import 'package:quick_church/core/theme/app_theme.dart';
+import 'package:quick_church/core/widgets/kneel_logo.dart';
+import 'package:quick_church/features/auth/presentation/widgets/biometric_enable_sheet.dart';
 import 'package:quick_church/features/profile/presentation/bloc/profile_cubit.dart';
 import 'package:quick_church/features/profile/presentation/bloc/profile_state.dart';
 
@@ -372,11 +374,22 @@ class _OnboardingPageState extends State<OnboardingPage> {
     final isDark = theme.brightness == Brightness.dark;
 
     return BlocListener<ProfileCubit, ProfileState>(
-      listener: (context, state) {
-        if (state is ProfileLoaded) {
-          // Onboarding complete - the main.dart will handle navigation
+      listener: (listenerContext, state) {
+        if (state is ProfileLoaded && _isCompleting) {
+          // Onboarding complete - show biometric enable prompt
+          // The main.dart SmartRouter will handle navigation after the sheet closes
+          _isCompleting = false;
+
+          // Small delay to let the UI settle before showing the sheet
+          // The mounted check ensures the widget is still in the tree
+          Future.delayed(const Duration(milliseconds: 300), () {
+            if (mounted) {
+              // ignore: use_build_context_synchronously
+              BiometricEnableSheet.show(context);
+            }
+          });
         } else if (state is ProfileError) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          ScaffoldMessenger.of(listenerContext).showSnackBar(
             SnackBar(content: Text(state.message)),
           );
         }
@@ -420,25 +433,13 @@ class _OnboardingPageState extends State<OnboardingPage> {
       padding: const EdgeInsets.all(24),
       child: Column(
         children: [
-          // Logo
+          // Official Kneel Logo - Light variant for onboarding (white/light background)
           FadeInDown(
             duration: const Duration(milliseconds: 600),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: AppTheme.primaryColor,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(
-                    Icons.favorite,
-                    color: Colors.white,
-                    size: 20,
-                  ),
-                ),
+                KneelLogo.light(height: 40),
                 const SizedBox(width: 12),
                 Text(
                   AppStrings.appName,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:lucide_icons/lucide_icons.dart';
 import 'package:quick_church/core/theme/app_theme.dart';
 import 'package:quick_church/features/prayer/domain/entities/prayer.dart';
 
@@ -191,35 +192,9 @@ class _PrayerCardState extends State<PrayerCard>
                       ),
                       const Spacer(),
 
-                      // Prayer count
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: colorScheme.primaryContainer.withAlpha(128),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.favorite,
-                              size: 14,
-                              color: colorScheme.primary,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              '${widget.prayer.prayerCount}',
-                              style: theme.textTheme.labelMedium?.copyWith(
-                                color: colorScheme.primary,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                      // Persistence Badge - Shows how many times this prayer has been lifted up
+                      // "Pray without ceasing" (1 Thess 5:17), "Pray and not give up" (Luke 18:1)
+                      _buildPersistenceBadge(theme, colorScheme),
                     ],
                   ),
 
@@ -364,6 +339,62 @@ class _PrayerCardState extends State<PrayerCard>
           fontSize: 11,
           fontWeight: FontWeight.w600,
         ),
+      ),
+    );
+  }
+
+  /// Builds the persistence badge showing how many times the prayer has been lifted up.
+  /// Uses a flame icon to represent the passion and persistence of prayer.
+  Widget _buildPersistenceBadge(ThemeData theme, ColorScheme colorScheme) {
+    final count = widget.prayer.prayerCount;
+
+    // Choose color intensity based on prayer count milestones
+    final Color badgeColor;
+    final Color bgColor;
+    if (count >= 50) {
+      // Gold tier - fervent prayer warrior
+      badgeColor = const Color(0xFFD4A574);
+      bgColor = const Color(0xFFD4A574).withAlpha(26);
+    } else if (count >= 20) {
+      // Orange tier - persistent prayer
+      badgeColor = const Color(0xFFE67E22);
+      bgColor = const Color(0xFFE67E22).withAlpha(26);
+    } else if (count >= 5) {
+      // Amber tier - growing in persistence
+      badgeColor = const Color(0xFFF39C12);
+      bgColor = const Color(0xFFF39C12).withAlpha(26);
+    } else {
+      // Default - starting the journey
+      badgeColor = colorScheme.primary;
+      bgColor = colorScheme.primaryContainer.withAlpha(128);
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: 10,
+        vertical: 4,
+      ),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            LucideIcons.flame,
+            size: 14,
+            color: badgeColor,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            count == 1 ? 'Prayed 1×' : 'Prayed $count×',
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: badgeColor,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ),
     );
   }
