@@ -94,6 +94,10 @@ class _SacredTimeConfigSheetState extends State<SacredTimeConfigSheet> {
         return LucideIcons.cloudRain;
       case SacredAmbience.softInstrumental:
         return LucideIcons.music;
+      case SacredAmbience.oceanWaves:
+        return LucideIcons.waves;
+      case SacredAmbience.cracklingFire:
+        return LucideIcons.flame;
     }
   }
 
@@ -487,10 +491,18 @@ class _SacredTimeConfigSheetState extends State<SacredTimeConfigSheet> {
 
   void _onStart() {
     HapticFeedback.mediumImpact();
+
+    // Preserve prayerId and prayerTitle from initial config
+    // CRITICAL: Only link prayer if focus area is Prayer
+    final shouldLinkPrayer = _selectedFocus == SacredFocusArea.prayer;
+
     widget.onStart(SacredTimeConfig(
       focusArea: _selectedFocus,
       duration: _selectedDuration,
       ambience: _selectedAmbience,
+      // Only pass prayer context if user selected "Prayer" as focus area
+      prayerId: shouldLinkPrayer ? widget.initialConfig?.prayerId : null,
+      prayerTitle: shouldLinkPrayer ? widget.initialConfig?.prayerTitle : null,
     ));
   }
 }

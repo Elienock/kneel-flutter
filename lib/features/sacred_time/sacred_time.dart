@@ -22,6 +22,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:quick_church/features/insights/presentation/bloc/insights_cubit.dart';
+import 'package:quick_church/features/prayer/presentation/bloc/prayer_cubit.dart';
 import 'package:quick_church/features/sacred_time/domain/entities/sacred_time_session.dart';
 import 'package:quick_church/features/sacred_time/presentation/pages/sacred_time_session_page.dart';
 import 'package:quick_church/features/sacred_time/presentation/widgets/sacred_time_config_sheet.dart';
@@ -72,11 +73,12 @@ class SacredTime {
       return Navigator.of(context).push<bool>(
         PageRouteBuilder(
           pageBuilder: (ctx, animation, secondaryAnimation) {
-            // Preserve the SermonCubit and InsightsCubit for auto-save
+            // Preserve all necessary cubits for the session
             return MultiBlocProvider(
               providers: [
                 BlocProvider.value(value: context.read<SermonCubit>()),
                 BlocProvider.value(value: context.read<InsightsCubit>()),
+                BlocProvider.value(value: context.read<PrayerCubit>()),
               ],
               child: SacredTimeSessionPage(
                 config: finalConfig,
@@ -133,6 +135,7 @@ class SacredTime {
               providers: [
                 BlocProvider.value(value: context.read<SermonCubit>()),
                 BlocProvider.value(value: context.read<InsightsCubit>()),
+                BlocProvider.value(value: context.read<PrayerCubit>()),
               ],
               child: SacredTimeSessionPage(
                 config: config,

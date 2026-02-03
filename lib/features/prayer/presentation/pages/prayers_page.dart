@@ -437,30 +437,88 @@ class _PrayerListItem extends StatefulWidget {
 }
 
 class _PrayerListItemState extends State<_PrayerListItem> {
-  bool _prayedToday = false;
+  void _showMarkAsAnsweredConfirmation() {
+    HapticFeedback.selectionClick();
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
-  @override
-  void initState() {
-    super.initState();
-    _checkIfPrayedToday();
-  }
-
-  void _checkIfPrayedToday() {
-    if (widget.prayer.lastPrayedAt != null) {
-      final now = DateTime.now();
-      final lastPrayed = widget.prayer.lastPrayedAt!;
-      _prayedToday = now.year == lastPrayed.year &&
-          now.month == lastPrayed.month &&
-          now.day == lastPrayed.day;
-    }
-  }
-
-  void _recordPrayer() {
-    HapticFeedback.lightImpact();
-    context.read<PrayerCubit>().incrementPrayerCount(widget.prayer.id);
-    setState(() => _prayedToday = true);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Amen. Your prayer has been recorded.')),
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Icon(LucideIcons.sparkles, color: AppTheme.answeredColor, size: 24),
+            const SizedBox(width: 12),
+            const Text('Mark as Answered?'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'This will move "${widget.prayer.title}" to the Hall of Faith.',
+              style: theme.textTheme.bodyMedium,
+            ),
+            if (widget.prayer.prayerCount > 0) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.goldenPromise.withAlpha(isDark ? 30 : 20),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    Icon(LucideIcons.flame, size: 18, color: AppTheme.goldenPromise),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Prayed ${widget.prayer.prayerCount} times',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.goldenPromise,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              context.read<PrayerCubit>().markAsAnswered(widget.prayer.id);
+              HapticFeedback.heavyImpact();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Row(
+                    children: [
+                      Icon(LucideIcons.trophy, color: AppTheme.goldenPromise, size: 20),
+                      const SizedBox(width: 12),
+                      const Text('Victory! Added to Hall of Faith'),
+                    ],
+                  ),
+                  backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              );
+            },
+            style: FilledButton.styleFrom(
+              backgroundColor: AppTheme.answeredColor,
+            ),
+            child: const Text('Mark Answered'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -636,17 +694,16 @@ class _PrayerListItemState extends State<_PrayerListItem> {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    Column(
-                      children: [
-                        IconButton(
-                          icon: Icon(
-                            _prayedToday ? LucideIcons.checkCircle2 : LucideIcons.circle,
-                            color: _prayedToday ? AppTheme.secondaryColor : theme.colorScheme.outline,
-                          ),
-                          onPressed: _prayedToday ? null : _recordPrayer,
+                    // Mark as Answered button (only show for active prayers)
+                    if (!isAnswered)
+                      IconButton(
+                        icon: Icon(
+                          LucideIcons.sparkles,
+                          color: AppTheme.answeredColor.withAlpha(180),
                         ),
-                      ],
-                    ),
+                        tooltip: 'Mark as Answered',
+                        onPressed: _showMarkAsAnsweredConfirmation,
+                      ),
                   ],
                 ),
               ),

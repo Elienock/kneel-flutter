@@ -16,7 +16,9 @@ enum SacredFocusArea {
 enum SacredAmbience {
   silence('Silence', null),
   gentleRain('Gentle Rain', 'rain'),
-  softInstrumental('Soft Instrumental', 'instrumental');
+  softInstrumental('Soft Instrumental', 'instrumental'),
+  oceanWaves('Ocean Waves', 'ocean'),
+  cracklingFire('Crackling Fire', 'fire');
 
   final String label;
   final String? assetKey;
@@ -27,6 +29,7 @@ enum SacredAmbience {
 /// Use `unlimited` for stopwatch mode (counts UP instead of DOWN).
 enum SacredDuration {
   five(5, '5 min'),
+  ten(10, '10 min'),
   fifteen(15, '15 min'),
   thirty(30, '30 min'),
   sixty(60, '1 hour'),
