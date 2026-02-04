@@ -17,6 +17,8 @@ import 'package:quick_church/features/profile/presentation/bloc/profile_cubit.da
 import 'package:quick_church/features/profile/presentation/bloc/profile_state.dart';
 import 'package:quick_church/features/profile/presentation/pages/profile_page.dart';
 import 'package:quick_church/features/profile/presentation/widgets/email_verification_banner.dart';
+import 'package:quick_church/features/pulpit/presentation/bloc/pulpit_cubit.dart';
+import 'package:quick_church/features/pulpit/presentation/pages/pulpit_groups_page.dart';
 
 /// Home tab with YouVersion-style dual-view: Today and Community.
 class HomePage extends StatelessWidget {
@@ -239,6 +241,10 @@ class _TodayView extends StatelessWidget {
 
             // Quick Actions
             _QuickActionsRow(prayers: prayers),
+            const SizedBox(height: 24),
+
+            // Pulpit Mode Card (for leaders)
+            const _PulpitModeCard(),
             const SizedBox(height: 24),
 
             // Guided Sessions Section
@@ -1020,6 +1026,93 @@ class _QuickActionsRow extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Pulpit Mode card - quick access to lead group prayer sessions.
+class _PulpitModeCard extends StatelessWidget {
+  const _PulpitModeCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.mediumImpact();
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (ctx) => BlocProvider.value(
+              value: context.read<PulpitCubit>(),
+              child: const PulpitGroupsPage(),
+            ),
+          ),
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              AppTheme.primaryColor.withAlpha(isDark ? 40 : 30),
+              AppTheme.secondaryColor.withAlpha(isDark ? 30 : 20),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+          border: Border.all(
+            color: AppTheme.primaryColor.withAlpha(50),
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppTheme.primaryColor.withAlpha(30),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: const Icon(
+                LucideIcons.mic2,
+                color: AppTheme.primaryColor,
+                size: 28,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Pulpit Mode',
+                    style: GoogleFonts.outfit(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Lead group prayer sessions',
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      color: isDark ? Colors.white70 : Colors.black54,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              LucideIcons.chevronRight,
+              color: isDark ? Colors.white38 : Colors.black26,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

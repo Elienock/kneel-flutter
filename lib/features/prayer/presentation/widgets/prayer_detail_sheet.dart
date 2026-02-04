@@ -4,11 +4,13 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:quick_church/core/theme/app_theme.dart';
+import 'package:quick_church/features/insights/presentation/bloc/insights_cubit.dart';
 import 'package:quick_church/features/prayer/domain/entities/prayer.dart';
 import 'package:quick_church/features/prayer/presentation/bloc/prayer_cubit.dart';
 import 'package:quick_church/features/prayer/presentation/widgets/edit_prayer_bottom_sheet.dart';
 import 'package:quick_church/features/prayer/presentation/widgets/pin_dialog.dart';
 import 'package:quick_church/features/sacred_time/sacred_time.dart';
+import 'package:quick_church/features/sermon/presentation/bloc/sermon_cubit.dart';
 
 /// Bottom sheet showing full prayer details with actions.
 class PrayerDetailSheet extends StatefulWidget {
@@ -22,7 +24,10 @@ class PrayerDetailSheet extends StatefulWidget {
   });
 
   static Future<void> show(BuildContext context, Prayer prayer, {bool isUnlocked = false}) async {
-    final cubit = context.read<PrayerCubit>();
+    // Capture ALL cubits needed for Sacred Time integration
+    final prayerCubit = context.read<PrayerCubit>();
+    final sermonCubit = context.read<SermonCubit>();
+    final insightsCubit = context.read<InsightsCubit>();
 
     // Check if prayer is locked and needs PIN
     if (prayer.isLocked && !isUnlocked) {
@@ -41,8 +46,12 @@ class PrayerDetailSheet extends StatefulWidget {
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: Colors.transparent,
-      builder: (sheetContext) => BlocProvider.value(
-        value: cubit,
+      builder: (sheetContext) => MultiBlocProvider(
+        providers: [
+          BlocProvider.value(value: prayerCubit),
+          BlocProvider.value(value: sermonCubit),
+          BlocProvider.value(value: insightsCubit),
+        ],
         child: PrayerDetailSheet(prayer: prayer, isUnlocked: true),
       ),
     );
@@ -297,14 +306,19 @@ class _PrayerDetailSheetState extends State<PrayerDetailSheet> {
               child: FilledButton.icon(
                 onPressed: () async {
                   HapticFeedback.mediumImpact();
-                  Navigator.pop(context); // Close the detail sheet first
 
                   // Launch Sacred Time with prayer context
-                  await SacredTime.start(
+                  // Don't pop first - let Sacred Time handle navigation
+                  final completed = await SacredTime.start(
                     context,
                     prayerId: widget.prayer.id,
                     prayerTitle: widget.prayer.title,
                   );
+
+                  // Close the detail sheet after returning from Sacred Time
+                  if (mounted && completed != null) {
+                    Navigator.pop(context);
+                  }
                 },
                 icon: const Icon(LucideIcons.timer),
                 label: const Text('Enter Sanctuary'),

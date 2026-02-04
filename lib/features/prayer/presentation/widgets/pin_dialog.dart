@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:local_auth/local_auth.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:quick_church/core/theme/app_theme.dart';
@@ -9,6 +10,8 @@ import 'package:quick_church/core/theme/app_theme.dart';
 class PinManager {
   static const String _pinKey = 'app_pin';
   static const String _pinSetKey = 'pin_is_set';
+  static const String _biometricEnabledKey = 'biometric_enabled';
+  static final LocalAuthentication _localAuth = LocalAuthentication();
 
   /// Check if a PIN has been set.
   static Future<bool> isPinSet() async {
@@ -35,6 +38,56 @@ class PinManager {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_pinKey);
     await prefs.setBool(_pinSetKey, false);
+  }
+
+  /// Check if device supports biometric authentication.
+  static Future<bool> canUseBiometrics() async {
+    try {
+      final canAuthenticateWithBiometrics = await _localAuth.canCheckBiometrics;
+      final canAuthenticate = canAuthenticateWithBiometrics || await _localAuth.isDeviceSupported();
+      return canAuthenticate;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Get available biometric types.
+  static Future<List<BiometricType>> getAvailableBiometrics() async {
+    try {
+      return await _localAuth.getAvailableBiometrics();
+    } catch (e) {
+      return [];
+    }
+  }
+
+  /// Check if biometric unlock is enabled by user.
+  static Future<bool> isBiometricEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_biometricEnabledKey) ?? false;
+  }
+
+  /// Enable or disable biometric unlock.
+  static Future<void> setBiometricEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_biometricEnabledKey, enabled);
+  }
+
+  /// Authenticate using biometrics.
+  static Future<bool> authenticateWithBiometrics() async {
+    try {
+      final canUse = await canUseBiometrics();
+      if (!canUse) return false;
+
+      return await _localAuth.authenticate(
+        localizedReason: 'Unlock your private prayers',
+        options: const AuthenticationOptions(
+          stickyAuth: true,
+          biometricOnly: true,
+        ),
+      );
+    } catch (e) {
+      return false;
+    }
   }
 }
 
@@ -111,6 +164,48 @@ class _PinDialogState extends State<PinDialog> {
   bool _isError = false;
   bool _isSuccess = false;
   bool _isVerifying = false;
+  bool _canUseBiometrics = false;
+  bool _biometricEnabled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkBiometrics();
+  }
+
+  Future<void> _checkBiometrics() async {
+    final canUse = await PinManager.canUseBiometrics();
+    final isEnabled = await PinManager.isBiometricEnabled();
+
+    if (mounted) {
+      setState(() {
+        _canUseBiometrics = canUse;
+        _biometricEnabled = isEnabled;
+      });
+
+      // Auto-trigger biometrics if enabled
+      if (canUse && isEnabled) {
+        _authenticateWithBiometrics();
+      }
+    }
+  }
+
+  Future<void> _authenticateWithBiometrics() async {
+    if (_isVerifying) return;
+
+    setState(() => _isVerifying = true);
+
+    final success = await PinManager.authenticateWithBiometrics();
+
+    if (success) {
+      setState(() => _isSuccess = true);
+      HapticFeedback.mediumImpact();
+      await Future.delayed(const Duration(milliseconds: 300));
+      widget.onSuccess();
+    } else {
+      setState(() => _isVerifying = false);
+    }
+  }
 
   void _onNumberPressed(String number) {
     if (_enteredPin.length < 4 && !_isVerifying) {
@@ -158,6 +253,58 @@ class _PinDialogState extends State<PinDialog> {
   }
 
   Future<void> _handleForgotPin() async {
+    // Check if biometrics are available and enabled - offer as alternative
+    if (_canUseBiometrics && _biometricEnabled) {
+      final useBiometric = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppTheme.dialogRadius),
+          ),
+          title: Row(
+            children: [
+              const Icon(LucideIcons.fingerprint, color: AppTheme.primaryColor),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text('Forgot PIN?', style: GoogleFonts.outfit(fontWeight: FontWeight.w700)),
+              ),
+            ],
+          ),
+          content: Text(
+            'You can use biometrics to unlock instead, or reset your PIN entirely.',
+            style: GoogleFonts.inter(),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, null), // Cancel
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, false), // Reset
+              child: const Text(
+                'Reset PIN',
+                style: TextStyle(color: AppTheme.urgentColor),
+              ),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true), // Use biometrics
+              child: const Text('Use Biometrics'),
+            ),
+          ],
+        ),
+      );
+
+      if (useBiometric == true) {
+        _authenticateWithBiometrics();
+        return;
+      } else if (useBiometric == null) {
+        return; // Cancelled
+      }
+      // Fall through to reset if useBiometric == false
+    }
+
+    // Show standard reset dialog
+    if (!mounted) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -187,6 +334,7 @@ class _PinDialogState extends State<PinDialog> {
 
     if (confirmed == true) {
       await PinManager.resetPin();
+      await PinManager.setBiometricEnabled(false); // Also disable biometrics
       if (mounted) {
         Navigator.of(context).pop(true); // Allow access after reset
       }
@@ -355,7 +503,24 @@ class _PinDialogState extends State<PinDialog> {
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const SizedBox(width: 72),
+            // Biometric button (if available)
+            SizedBox(
+              width: 72,
+              height: 56,
+              child: _canUseBiometrics
+                  ? IconButton(
+                      onPressed: _authenticateWithBiometrics,
+                      icon: Icon(
+                        LucideIcons.fingerprint,
+                        color: _biometricEnabled
+                            ? AppTheme.primaryColor
+                            : (isDark ? Colors.white38 : Colors.black26),
+                        size: 28,
+                      ),
+                      tooltip: _biometricEnabled ? 'Use biometrics' : 'Enable in settings',
+                    )
+                  : const SizedBox.shrink(),
+            ),
             _NumberButton(
               number: '0',
               onPressed: () => _onNumberPressed('0'),
@@ -451,6 +616,21 @@ class _PinSetupDialogState extends State<_PinSetupDialog> {
     if (_firstPin.join() == _confirmPin.join()) {
       await PinManager.setPin(_firstPin.join());
       HapticFeedback.mediumImpact();
+
+      // Check if device supports biometrics and offer to enable
+      final canUseBiometrics = await PinManager.canUseBiometrics();
+
+      if (mounted && canUseBiometrics) {
+        final enableBiometrics = await _showBiometricEnrollmentDialog();
+        if (enableBiometrics) {
+          // Verify biometrics work before enabling
+          final authenticated = await PinManager.authenticateWithBiometrics();
+          if (authenticated) {
+            await PinManager.setBiometricEnabled(true);
+          }
+        }
+      }
+
       if (mounted) {
         Navigator.of(context).pop(true);
       }
@@ -462,6 +642,58 @@ class _PinSetupDialogState extends State<_PinSetupDialog> {
         _confirmPin.clear();
       });
     }
+  }
+
+  Future<bool> _showBiometricEnrollmentDialog() async {
+    final biometrics = await PinManager.getAvailableBiometrics();
+    String biometricName = 'Biometrics';
+
+    if (biometrics.contains(BiometricType.face)) {
+      biometricName = 'Face ID';
+    } else if (biometrics.contains(BiometricType.fingerprint)) {
+      biometricName = 'Fingerprint';
+    }
+
+    if (!mounted) return false;
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppTheme.dialogRadius),
+        ),
+        title: Row(
+          children: [
+            const Icon(
+              LucideIcons.fingerprint,
+              color: AppTheme.primaryColor,
+              size: 28,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Enable $biometricName?',
+                style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          'Use $biometricName as a quick way to unlock your private prayers. You can still use your PIN anytime.',
+          style: GoogleFonts.inter(),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Not Now'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Enable'),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
   }
 
   @override

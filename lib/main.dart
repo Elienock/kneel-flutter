@@ -24,6 +24,7 @@ import 'package:quick_church/features/profile/presentation/bloc/profile_cubit.da
 import 'package:quick_church/features/profile/presentation/bloc/profile_state.dart';
 import 'package:quick_church/features/sermon/presentation/bloc/sermon_cubit.dart';
 import 'package:quick_church/features/insights/presentation/bloc/insights_cubit.dart';
+import 'package:quick_church/features/pulpit/presentation/bloc/pulpit_cubit.dart';
 import 'package:quick_church/injection.dart';
 
 void main() async {
@@ -123,6 +124,9 @@ class _KneelAppState extends State<KneelApp> {
         ),
         BlocProvider(
           create: (_) => getIt<InsightsCubit>(),
+        ),
+        BlocProvider(
+          create: (_) => PulpitCubit()..loadGroups(),
         ),
       ],
       child: BlocBuilder<LanguageCubit, Locale>(
