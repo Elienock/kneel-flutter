@@ -7,7 +7,8 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:quick_church/core/theme/app_theme.dart';
 import 'package:quick_church/features/guided/data/mock_guided_content.dart';
 import 'package:quick_church/features/guided/presentation/pages/guided_sessions_page.dart';
-import 'package:quick_church/features/guided/presentation/widgets/guided_session_card.dart';
+import 'package:quick_church/features/guided/presentation/pages/plan_detail_page.dart';
+import 'package:quick_church/features/guided/domain/entities/guided_session.dart';
 import 'package:quick_church/features/prayer/domain/entities/prayer.dart';
 import 'package:quick_church/features/prayer/presentation/bloc/prayer_cubit.dart';
 import 'package:quick_church/features/prayer/presentation/bloc/prayer_state.dart';
@@ -29,6 +30,13 @@ import 'package:quick_church/features/community/presentation/widgets/intention_d
 import 'package:quick_church/features/community/domain/entities/friend_activity.dart';
 import 'package:quick_church/features/community/domain/entities/shared_intention.dart';
 import 'package:quick_church/features/community/domain/entities/prayer_group.dart';
+import 'package:quick_church/features/community/domain/entities/testimony.dart';
+import 'package:quick_church/features/community/domain/entities/friend.dart';
+import 'package:quick_church/features/community/presentation/pages/friend_profile_page.dart';
+import 'package:quick_church/features/community/presentation/pages/all_activities_page.dart';
+import 'package:quick_church/features/community/presentation/pages/all_intentions_page.dart';
+import 'package:quick_church/features/community/presentation/pages/all_testimonies_page.dart';
+import 'package:quick_church/features/community/presentation/widgets/testimony_detail_sheet.dart';
 
 /// Home tab with YouVersion-style dual-view: Today and Community.
 class HomePage extends StatelessWidget {
@@ -284,6 +292,31 @@ class _CommunityView extends StatefulWidget {
 }
 
 class _CommunityViewState extends State<_CommunityView> {
+  // Mock testimonies (will come from CommunityCubit in future)
+  final _mockTestimonies = [
+    SharedTestimony(
+      id: 't1',
+      author: const Friend(id: 'f1', name: 'Sarah Johnson', bio: 'Walking by faith'),
+      title: 'God healed my mother!',
+      story: 'After weeks of prayer, my mother\'s test results came back clear. The doctors were amazed!',
+      answeredAt: DateTime.now().subtract(const Duration(days: 5)),
+      sharedAt: DateTime.now().subtract(const Duration(days: 3)),
+      celebrationCount: 89,
+      commentCount: 23,
+    ),
+    SharedTestimony(
+      id: 't2',
+      author: const Friend(id: 'f2', name: 'Michael Chen', bio: 'Youth pastor'),
+      title: 'Found the perfect job!',
+      story: 'I was unemployed for 3 months and prayed every day. Last week I received an offer for my dream job!',
+      answeredAt: DateTime.now().subtract(const Duration(days: 10)),
+      sharedAt: DateTime.now().subtract(const Duration(days: 7)),
+      celebrationCount: 124,
+      commentCount: 31,
+      hasCelebrated: true,
+    ),
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -291,6 +324,23 @@ class _CommunityViewState extends State<_CommunityView> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<CommunityCubit>().loadAll();
     });
+  }
+
+  List<Widget> _buildTestimoniesPreview(BuildContext context, bool isDark) {
+    if (_mockTestimonies.isEmpty) {
+      return [
+        _EmptyStateCard(
+          icon: LucideIcons.trophy,
+          message: 'No testimonies yet. When friends share answered prayers, they\'ll appear here!',
+          isDark: isDark,
+        ),
+      ];
+    }
+
+    return _mockTestimonies.take(2).map((testimony) => _TestimonyPreviewCard(
+          testimony: testimony,
+          isDark: isDark,
+        )).toList();
   }
 
   @override
@@ -367,14 +417,28 @@ class _CommunityViewState extends State<_CommunityView> {
                 ],
               ),
 
-              // Friends Activity Header
-              const _SectionHeader(
+              // Friends Activity Header with See all
+              _SectionHeader(
                 title: 'Friend Activity',
                 icon: LucideIcons.activity,
+                actionLabel: state.activities.length > 4 ? 'See all' : null,
+                onAction: state.activities.length > 4
+                    ? () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => BlocProvider.value(
+                              value: context.read<CommunityCubit>(),
+                              child: const AllActivitiesPage(),
+                            ),
+                          ),
+                        );
+                      }
+                    : null,
               ),
               const SizedBox(height: 12),
 
-              // Activity Feed from Cubit
+              // Activity Feed from Cubit - now with tappable friend names
               if (state.activities.isEmpty)
                 _EmptyStateCard(
                   icon: LucideIcons.activity,
@@ -389,13 +453,25 @@ class _CommunityViewState extends State<_CommunityView> {
 
               const SizedBox(height: 24),
 
-              // Shared Intentions Section
+              // Shared Intentions Section with See all
               _SectionHeader(
                 title: 'Shared Intentions',
                 icon: LucideIcons.heart,
-                actionLabel: 'Share',
+                actionLabel: state.intentions.isEmpty ? 'Share' : 'See all',
                 onAction: () {
-                  CreateIntentionSheet.show(context, context.read<CommunityCubit>());
+                  if (state.intentions.isEmpty) {
+                    CreateIntentionSheet.show(context, context.read<CommunityCubit>());
+                  } else {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => BlocProvider.value(
+                          value: context.read<CommunityCubit>(),
+                          child: const AllIntentionsPage(),
+                        ),
+                      ),
+                    );
+                  }
                 },
               ),
               const SizedBox(height: 12),
@@ -411,6 +487,30 @@ class _CommunityViewState extends State<_CommunityView> {
                       intention: intention,
                       isDark: isDark,
                     )),
+
+              const SizedBox(height: 24),
+
+              // Testimonies Section (Answered Prayers shared by friends)
+              _SectionHeader(
+                title: 'Testimonies',
+                icon: LucideIcons.trophy,
+                actionLabel: 'See all',
+                onAction: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => BlocProvider.value(
+                        value: context.read<CommunityCubit>(),
+                        child: const AllTestimoniesPage(),
+                      ),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 12),
+
+              // Mock testimonies for now
+              ..._buildTestimoniesPreview(context, isDark),
 
               const SizedBox(height: 24),
 
@@ -510,6 +610,10 @@ class _EmptyStateCard extends StatelessWidget {
 }
 
 /// Activity card using real FriendActivity data.
+/// - Tap avatar/name → Friend profile
+/// - Tap card body → Navigate to activity context (intention, group, testimony, etc.)
+///
+/// Backend-ready: Uses activity.targetId for navigation to related content.
 class _ActivityCard extends StatelessWidget {
   final FriendActivity activity;
   final bool isDark;
@@ -536,104 +640,186 @@ class _ActivityCard extends StatelessWidget {
     }
   }
 
+  /// Navigate to the context of the activity (like Instagram notifications).
+  void _navigateToContext(BuildContext context) {
+    HapticFeedback.selectionClick();
+
+    switch (activity.type) {
+      case ActivityType.startedPraying:
+      case ActivityType.sharedIntention:
+        // Navigate to intention detail
+        // TODO: Fetch intention by activity.targetId from backend
+        _showContextMessage(context, 'Opening prayer request...');
+        // In production: IntentionDetailSheet.show(context, intention);
+        break;
+
+      case ActivityType.joinedGroup:
+        // Navigate to group detail
+        // TODO: Fetch group by activity.targetId from backend
+        _showContextMessage(context, 'Opening ${activity.targetTitle ?? "group"}...');
+        // In production: Navigator.push(...GroupDetailPage(group: group));
+        break;
+
+      case ActivityType.answeredPrayer:
+        // Navigate to testimony detail
+        // TODO: Fetch testimony by activity.targetId from backend
+        _showContextMessage(context, 'Opening testimony...');
+        // In production: TestimonyDetailSheet.show(context, testimony);
+        break;
+
+      case ActivityType.prayerStreak:
+      case ActivityType.newFriend:
+        // No specific context, go to friend profile
+        FriendProfilePage.show(context, activity.friend);
+        break;
+    }
+  }
+
+  void _showContextMessage(BuildContext context, String message) {
+    // For now, show friend profile with a message
+    // In production, this will navigate to actual content
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 1),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+    FriendProfilePage.show(context, activity.friend);
+  }
+
   @override
   Widget build(BuildContext context) {
     final (icon, color) = _getActivityIcon();
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDark ? AppTheme.darkSurface : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(isDark ? 51 : 13),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Avatar
-          Stack(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: color.withAlpha(51),
-                  shape: BoxShape.circle,
-                ),
-                child: Center(
-                  child: Text(
-                    activity.friend.initials,
-                    style: GoogleFonts.outfit(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: color,
+    return GestureDetector(
+      onTap: () => _navigateToContext(context),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isDark ? AppTheme.darkSurface : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withAlpha(isDark ? 51 : 13),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Avatar - tappable to view profile (stops propagation)
+            GestureDetector(
+              onTap: () {
+                HapticFeedback.selectionClick();
+                FriendProfilePage.show(context, activity.friend);
+              },
+              child: Stack(
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: color.withAlpha(51),
+                      shape: BoxShape.circle,
                     ),
-                  ),
-                ),
-              ),
-              Positioned(
-                right: -2,
-                bottom: -2,
-                child: Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    color: color,
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: isDark ? AppTheme.darkSurface : Colors.white,
-                      width: 2,
-                    ),
-                  ),
-                  child: Icon(icon, size: 10, color: Colors.white),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                RichText(
-                  text: TextSpan(
-                    style: GoogleFonts.inter(
-                      fontSize: 14,
-                      color: isDark ? Colors.white : Colors.black87,
-                    ),
-                    children: [
-                      TextSpan(
-                        text: activity.friend.name,
-                        style: const TextStyle(fontWeight: FontWeight.w600),
+                    child: Center(
+                      child: Text(
+                        activity.friend.initials,
+                        style: GoogleFonts.outfit(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: color,
+                        ),
                       ),
-                      TextSpan(text: ' ${activity.description}'),
+                    ),
+                  ),
+                  Positioned(
+                    right: -2,
+                    bottom: -2,
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: color,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: isDark ? AppTheme.darkSurface : Colors.white,
+                          width: 2,
+                        ),
+                      ),
+                      child: Icon(icon, size: 10, color: Colors.white),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  RichText(
+                    text: TextSpan(
+                      style: GoogleFonts.inter(
+                        fontSize: 14,
+                        color: isDark ? Colors.white : Colors.black87,
+                      ),
+                      children: [
+                        TextSpan(
+                          text: activity.friend.name,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        TextSpan(text: ' ${activity.description}'),
+                      ],
+                    ),
+                  ),
+                  if (activity.targetTitle != null && activity.type != ActivityType.joinedGroup) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      '"${activity.targetTitle}"',
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        fontStyle: FontStyle.italic,
+                        color: isDark ? Colors.white54 : Colors.black54,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Text(
+                        activity.timeAgo,
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          color: isDark ? Colors.white38 : Colors.black38,
+                        ),
+                      ),
+                      const Spacer(),
+                      // Visual hint that card is tappable
+                      Icon(
+                        LucideIcons.chevronRight,
+                        size: 14,
+                        color: isDark ? Colors.white24 : Colors.black26,
+                      ),
                     ],
                   ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  activity.timeAgo,
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
-                    color: isDark ? Colors.white38 : Colors.black38,
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 }
 
 /// Intention card using real SharedIntention data.
+/// Author names are tappable to view their profile.
 class _IntentionCard extends StatelessWidget {
   final SharedIntention intention;
   final bool isDark;
@@ -671,69 +857,73 @@ class _IntentionCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: AppTheme.primaryColor.withAlpha(38),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Center(
-                    child: Text(
-                      intention.author.initials,
-                      style: GoogleFonts.outfit(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.primaryColor,
+            // Author row - tappable to view profile
+            GestureDetector(
+              onTap: () => FriendProfilePage.show(context, intention.author),
+              child: Row(
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryColor.withAlpha(38),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Center(
+                      child: Text(
+                        intention.author.initials,
+                        style: GoogleFonts.outfit(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.primaryColor,
+                        ),
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    intention.author.name,
-                    style: GoogleFonts.inter(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: isDark ? Colors.white : Colors.black87,
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      intention.author.name,
+                      style: GoogleFonts.inter(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? Colors.white : Colors.black87,
+                      ),
                     ),
                   ),
-                ),
-                if (isAnswered)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: AppTheme.answeredColor.withAlpha(25),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(LucideIcons.sparkles, size: 12, color: AppTheme.answeredColor),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Answered',
-                          style: GoogleFonts.inter(
-                            fontSize: 10,
-                            color: AppTheme.answeredColor,
-                            fontWeight: FontWeight.w600,
+                  if (isAnswered)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppTheme.answeredColor.withAlpha(25),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(LucideIcons.sparkles, size: 12, color: AppTheme.answeredColor),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Answered',
+                            style: GoogleFonts.inter(
+                              fontSize: 10,
+                              color: AppTheme.answeredColor,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
+                    )
+                  else
+                    Text(
+                      intention.timeAgo,
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: isDark ? Colors.white38 : Colors.black38,
+                      ),
                     ),
-                  )
-                else
-                  Text(
-                    intention.timeAgo,
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      color: isDark ? Colors.white38 : Colors.black38,
-                    ),
-                  ),
-              ],
+                ],
+              ),
             ),
             const SizedBox(height: 12),
             Text(
@@ -904,6 +1094,177 @@ class _GroupCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Testimony preview card for the Community view.
+/// Tappable to open full testimony detail sheet.
+class _TestimonyPreviewCard extends StatelessWidget {
+  final SharedTestimony testimony;
+  final bool isDark;
+
+  const _TestimonyPreviewCard({
+    required this.testimony,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.selectionClick();
+        TestimonyDetailSheet.show(context, testimony);
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: isDark ? AppTheme.darkSurface : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: AppTheme.answeredColor.withAlpha(80),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.answeredColor.withAlpha(20),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header with trophy badge
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  AppTheme.answeredColor.withAlpha(25),
+                  AppTheme.goldenPromise.withAlpha(15),
+                ],
+              ),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
+            ),
+            child: Row(
+              children: [
+                const Icon(LucideIcons.trophy, color: AppTheme.answeredColor, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    testimony.title,
+                    style: GoogleFonts.outfit(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.answeredColor,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Author - tappable
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+            child: GestureDetector(
+              onTap: () => FriendProfilePage.show(context, testimony.author),
+              child: Row(
+                children: [
+                  Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryColor.withAlpha(38),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Center(
+                      child: Text(
+                        testimony.author.initials,
+                        style: GoogleFonts.outfit(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.primaryColor,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    testimony.author.name,
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white : Colors.black87,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    testimony.timeAgo,
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      color: isDark ? Colors.white38 : Colors.black38,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          // Story preview
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Text(
+              testimony.story,
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                color: isDark ? Colors.white70 : Colors.black87,
+                height: 1.4,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          // Stats row
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+            child: Row(
+              children: [
+                Icon(
+                  LucideIcons.partyPopper,
+                  size: 14,
+                  color: testimony.hasCelebrated ? AppTheme.answeredColor : (isDark ? Colors.white38 : Colors.black38),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '${testimony.celebrationCount}',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    color: testimony.hasCelebrated ? AppTheme.answeredColor : (isDark ? Colors.white38 : Colors.black38),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Icon(
+                  LucideIcons.messageCircle,
+                  size: 14,
+                  color: isDark ? Colors.white38 : Colors.black38,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '${testimony.commentCount}',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    color: isDark ? Colors.white38 : Colors.black38,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
       ),
     );
   }
@@ -1335,12 +1696,13 @@ class _QuickActionCard extends StatelessWidget {
   }
 }
 
-/// Guided sessions horizontal scrolling section.
+/// Guided sessions horizontal scrolling section - YouVersion-style.
 class _GuidedSessionsSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final sessions = MockGuidedContent.getFeatured();
+    final isDark = theme.brightness == Brightness.dark;
+    final plans = MockGuidedPlans.getFeatured();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1349,7 +1711,7 @@ class _GuidedSessionsSection extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              'Guided Sessions',
+              'Spiritual Growth',
               style: theme.textTheme.titleLarge,
             ),
             TextButton(
@@ -1373,20 +1735,23 @@ class _GuidedSessionsSection extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         SizedBox(
-          height: 180,
+          height: 160,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
-            itemCount: sessions.length,
+            itemCount: plans.length,
             itemBuilder: (context, index) {
+              final plan = plans[index];
               return Padding(
-                padding: EdgeInsets.only(right: index < sessions.length - 1 ? 12 : 0),
-                child: GuidedSessionCard(
-                  session: sessions[index],
+                padding: EdgeInsets.only(right: index < plans.length - 1 ? 12 : 0),
+                child: _HomePlanCard(
+                  plan: plan,
+                  isDark: isDark,
                   onTap: () {
+                    HapticFeedback.selectionClick();
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => const GuidedSessionsPage(),
+                        builder: (_) => PlanDetailPage(plan: plan),
                       ),
                     );
                   },
@@ -1396,6 +1761,141 @@ class _GuidedSessionsSection extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Plan card for home page - compact YouVersion-style gradient card.
+class _HomePlanCard extends StatelessWidget {
+  final GuidedPlan plan;
+  final bool isDark;
+  final VoidCallback onTap;
+
+  const _HomePlanCard({
+    required this.plan,
+    required this.isDark,
+    required this.onTap,
+  });
+
+  IconData _getTypeIcon(GuidedContentType type) {
+    switch (type) {
+      case GuidedContentType.scripturePlan:
+        return LucideIcons.bookOpen;
+      case GuidedContentType.guidedPrayer:
+        return LucideIcons.heartHandshake;
+      case GuidedContentType.worshipSession:
+        return LucideIcons.music;
+      case GuidedContentType.breathingExercise:
+        return LucideIcons.wind;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 150,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [plan.gradientStart, plan.gradientEnd],
+          ),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: plan.gradientStart.withAlpha(80),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Stack(
+          children: [
+            // Decorative circle
+            Positioned(
+              top: -20,
+              right: -20,
+              child: Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white.withAlpha(20),
+                ),
+              ),
+            ),
+            // Content
+            Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Type icon
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withAlpha(30),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      _getTypeIcon(plan.type),
+                      color: Colors.white,
+                      size: 18,
+                    ),
+                  ),
+                  const Spacer(),
+                  // Title
+                  Text(
+                    plan.title,
+                    style: GoogleFonts.outfit(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      height: 1.2,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 6),
+                  // Duration
+                  Row(
+                    children: [
+                      Icon(
+                        LucideIcons.calendar,
+                        size: 12,
+                        color: Colors.white.withAlpha(180),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${plan.totalDays} ${plan.totalDays == 1 ? 'day' : 'days'}',
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          color: Colors.white.withAlpha(180),
+                        ),
+                      ),
+                    ],
+                  ),
+                  // Progress bar if started
+                  if (plan.isStarted) ...[
+                    const SizedBox(height: 8),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(2),
+                      child: LinearProgressIndicator(
+                        value: plan.progress,
+                        backgroundColor: Colors.white.withAlpha(50),
+                        valueColor: const AlwaysStoppedAnimation(Colors.white),
+                        minHeight: 3,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

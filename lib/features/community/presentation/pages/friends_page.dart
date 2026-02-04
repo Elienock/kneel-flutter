@@ -6,6 +6,7 @@ import 'package:quick_church/core/theme/app_theme.dart';
 import '../../domain/entities/friend.dart';
 import '../bloc/community_cubit.dart';
 import '../bloc/community_state.dart';
+import 'friend_profile_page.dart';
 
 /// Friends page showing friend list, requests, and discovery options.
 class FriendsPage extends StatefulWidget {
@@ -295,6 +296,7 @@ class _FriendsPageState extends State<FriendsPage> with SingleTickerProviderStat
   }
 }
 
+/// Friend card - tappable to view profile.
 class _FriendCard extends StatelessWidget {
   final Friend friend;
 
@@ -305,82 +307,96 @@ class _FriendCard extends StatelessWidget {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: theme.colorScheme.outline.withAlpha(25)),
-      ),
-      child: Row(
-        children: [
-          Stack(
-            children: [
-              CircleAvatar(
-                radius: 24,
-                backgroundColor: AppTheme.primaryColor.withAlpha(25),
-                child: Text(
-                  friend.initials,
-                  style: const TextStyle(
-                    color: AppTheme.primaryColor,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-              if (friend.isOnline)
-                Positioned(
-                  right: 0,
-                  bottom: 0,
-                  child: Container(
-                    width: 14,
-                    height: 14,
-                    decoration: BoxDecoration(
-                      color: AppTheme.answeredColor,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
-                        width: 2,
-                      ),
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.selectionClick();
+        FriendProfilePage.show(context, friend);
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: theme.colorScheme.outline.withAlpha(25)),
+        ),
+        child: Row(
+          children: [
+            Stack(
+              children: [
+                CircleAvatar(
+                  radius: 24,
+                  backgroundColor: AppTheme.primaryColor.withAlpha(25),
+                  child: Text(
+                    friend.initials,
+                    style: const TextStyle(
+                      color: AppTheme.primaryColor,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
-            ],
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  friend.name,
-                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
-                ),
-                if (friend.bio != null)
-                  Text(
-                    friend.bio!,
-                    style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                if (friend.isOnline)
+                  Positioned(
+                    right: 0,
+                    bottom: 0,
+                    child: Container(
+                      width: 14,
+                      height: 14,
+                      decoration: BoxDecoration(
+                        color: AppTheme.answeredColor,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+                          width: 2,
+                        ),
+                      ),
+                    ),
                   ),
               ],
             ),
-          ),
-          IconButton(
-            icon: const Icon(LucideIcons.messageCircle),
-            onPressed: () {
-              // TODO: Open chat
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Messaging coming soon!')),
-              );
-            },
-          ),
-        ],
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    friend.name,
+                    style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                  if (friend.bio != null)
+                    Text(
+                      friend.bio!,
+                      style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                ],
+              ),
+            ),
+            // Message button (stops propagation)
+            IconButton(
+              icon: const Icon(LucideIcons.messageCircle),
+              onPressed: () {
+                HapticFeedback.lightImpact();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Messaging coming soon!')),
+                );
+              },
+            ),
+            // Visual hint card is tappable
+            Icon(
+              LucideIcons.chevronRight,
+              size: 18,
+              color: theme.colorScheme.outline.withAlpha(100),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
+/// Friend request card - tap profile area to view requester's profile.
 class _FriendRequestCard extends StatelessWidget {
   final FriendRequest request;
 
@@ -401,37 +417,54 @@ class _FriendRequestCard extends StatelessWidget {
       ),
       child: Column(
         children: [
-          Row(
-            children: [
-              CircleAvatar(
-                radius: 24,
-                backgroundColor: AppTheme.primaryColor.withAlpha(25),
-                child: Text(
-                  request.from.initials,
-                  style: const TextStyle(
-                    color: AppTheme.primaryColor,
-                    fontWeight: FontWeight.bold,
+          // Profile row - tappable to view profile
+          GestureDetector(
+            onTap: () {
+              HapticFeedback.selectionClick();
+              FriendProfilePage.show(context, request.from);
+            },
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 24,
+                  backgroundColor: AppTheme.primaryColor.withAlpha(25),
+                  child: Text(
+                    request.from.initials,
+                    style: const TextStyle(
+                      color: AppTheme.primaryColor,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      request.from.name,
-                      style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
-                    ),
-                    if (request.from.mutualFriends > 0)
-                      Text(
-                        '${request.from.mutualFriends} mutual friends',
-                        style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            request.from.name,
+                            style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(width: 4),
+                          Icon(
+                            LucideIcons.chevronRight,
+                            size: 14,
+                            color: theme.colorScheme.outline,
+                          ),
+                        ],
                       ),
-                  ],
+                      if (request.from.mutualFriends > 0)
+                        Text(
+                          '${request.from.mutualFriends} mutual friends',
+                          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline),
+                        ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           const SizedBox(height: 16),
           Row(
@@ -464,6 +497,7 @@ class _FriendRequestCard extends StatelessWidget {
   }
 }
 
+/// Suggested friend card - tap profile area to view their profile.
 class _SuggestedFriendCard extends StatelessWidget {
   final Friend friend;
 
@@ -484,32 +518,49 @@ class _SuggestedFriendCard extends StatelessWidget {
       ),
       child: Row(
         children: [
-          CircleAvatar(
-            radius: 24,
-            backgroundColor: AppTheme.secondaryColor.withAlpha(25),
-            child: Text(
-              friend.initials,
-              style: const TextStyle(
-                color: AppTheme.secondaryColor,
-                fontWeight: FontWeight.bold,
-              ),
+          // Profile area - tappable
+          GestureDetector(
+            onTap: () {
+              HapticFeedback.selectionClick();
+              FriendProfilePage.show(context, friend);
+            },
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 24,
+                  backgroundColor: AppTheme.secondaryColor.withAlpha(25),
+                  child: Text(
+                    friend.initials,
+                    style: const TextStyle(
+                      color: AppTheme.secondaryColor,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+              ],
             ),
           ),
-          const SizedBox(width: 12),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  friend.name,
-                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
-                ),
-                if (friend.mutualFriends > 0)
+            child: GestureDetector(
+              onTap: () {
+                HapticFeedback.selectionClick();
+                FriendProfilePage.show(context, friend);
+              },
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Text(
-                    '${friend.mutualFriends} mutual friends',
-                    style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline),
+                    friend.name,
+                    style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
                   ),
-              ],
+                  if (friend.mutualFriends > 0)
+                    Text(
+                      '${friend.mutualFriends} mutual friends',
+                      style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline),
+                    ),
+                ],
+              ),
             ),
           ),
           FilledButton(

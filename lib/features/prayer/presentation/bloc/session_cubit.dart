@@ -3,16 +3,23 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:hive/hive.dart';
 import 'package:injectable/injectable.dart';
 import 'package:uuid/uuid.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:quick_church/core/utils/kneel_logger.dart';
+import 'package:quick_church/features/insights/domain/entities/user_session.dart';
+import 'package:quick_church/features/insights/domain/repositories/i_insights_repository.dart';
 import 'package:quick_church/features/prayer/data/models/prayer_session_model.dart';
 import 'package:quick_church/features/prayer/presentation/bloc/session_state.dart';
 
 /// Cubit for managing prayer session tracking and calendar data.
+/// Also syncs to Insights for unified heatmap tracking.
 @injectable
 class SessionCubit extends Cubit<SessionState> {
   final Box<PrayerSessionModel> _sessionBox;
   final Uuid _uuid;
+  final IInsightsRepository _insightsRepository;
 
-  SessionCubit(this._sessionBox, this._uuid) : super(const SessionInitial());
+  SessionCubit(this._sessionBox, this._uuid, this._insightsRepository)
+      : super(const SessionInitial());
 
   /// Loads all sessions and calculates streaks.
   Future<void> loadSessions() async {
@@ -46,6 +53,7 @@ class SessionCubit extends Cubit<SessionState> {
   }
 
   /// Records a completed prayer session.
+  /// Also syncs to Supabase for unified heatmap tracking.
   Future<void> recordSession({
     required int durationSeconds,
     required DateTime startedAt,
@@ -54,8 +62,9 @@ class SessionCubit extends Cubit<SessionState> {
     String? notes,
   }) async {
     try {
+      final sessionId = _uuid.v4();
       final session = PrayerSessionModel(
-        id: _uuid.v4(),
+        id: sessionId,
         date: normalizeDate(startedAt),
         durationSeconds: durationSeconds,
         startedAt: startedAt,
@@ -67,6 +76,9 @@ class SessionCubit extends Cubit<SessionState> {
 
       await _sessionBox.put(session.id, session);
       HapticFeedback.heavyImpact();
+
+      // Sync to Supabase for unified heatmap
+      await _syncToInsights(session);
 
       // Reload to recalculate streaks
       await loadSessions();
@@ -80,6 +92,35 @@ class SessionCubit extends Cubit<SessionState> {
       }
     } catch (e) {
       emit(SessionError('Failed to record session: $e'));
+    }
+  }
+
+  /// Sync a prayer session to Insights for unified heatmap tracking.
+  Future<void> _syncToInsights(PrayerSessionModel session) async {
+    try {
+      final userId = Supabase.instance.client.auth.currentUser?.id;
+      if (userId == null) return;
+
+      final userSession = UserSession(
+        id: session.id,
+        userId: userId,
+        type: SessionType.prayer,
+        durationMinutes: (session.durationSeconds / 60).ceil(),
+        actualDurationSeconds: session.durationSeconds,
+        sessionDate: session.date,
+        completed: true,
+        prayerAnswered: false,
+        createdAt: DateTime.now(),
+      );
+
+      await _insightsRepository.recordSession(userSession);
+      KneelLogger.log(
+        'Synced prayer session to insights: ${session.id}',
+        context: 'SessionCubit',
+      );
+    } catch (e) {
+      // Don't fail the main save if insights sync fails
+      KneelLogger.error('SessionCubit._syncToInsights', e);
     }
   }
 

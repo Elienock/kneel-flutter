@@ -156,12 +156,14 @@ class PrayerRepositoryImpl implements IPrayerRepository {
   @override
   Future<({Prayer? data, Failure? failure})> updateTestimony(
     String id,
-    String testimony,
-  ) async {
+    String testimony, {
+    bool isPublic = false,
+  }) async {
     try {
       final model = await _localDataSource.getPrayerById(id);
       final updated = model.copyWith(
         testimony: testimony,
+        isPublicTestimony: isPublic,
         updatedAt: DateTime.now(),
       );
       final result = await _localDataSource.updatePrayer(updated);

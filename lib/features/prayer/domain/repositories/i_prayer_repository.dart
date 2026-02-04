@@ -57,10 +57,12 @@ abstract class IPrayerRepository {
   /// Updates the testimony for an answered prayer.
   ///
   /// Returns the updated [Prayer] on success or a [Failure] on error.
+  /// Set [isPublic] to true to share the testimony with the community.
   Future<({Prayer? data, Failure? failure})> updateTestimony(
     String id,
-    String testimony,
-  );
+    String testimony, {
+    bool isPublic = false,
+  });
 
   /// Searches prayers by title or description.
   ///

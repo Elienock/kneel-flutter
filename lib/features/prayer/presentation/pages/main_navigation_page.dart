@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:quick_church/core/theme/app_theme.dart';
-import 'package:quick_church/features/insights/presentation/pages/insights_page.dart';
-import 'package:quick_church/features/prayer/presentation/pages/focus_page.dart';
+import 'package:quick_church/features/focus/presentation/pages/focus_page.dart';
+import 'package:quick_church/features/focus/presentation/pages/focus_timer_page.dart';
+import 'package:quick_church/features/more/presentation/pages/more_page.dart';
 import 'package:quick_church/features/prayer/presentation/pages/home_page.dart';
 import 'package:quick_church/features/prayer/presentation/pages/prayers_page.dart';
 import 'package:quick_church/features/prayer/presentation/widgets/add_prayer_bottom_sheet.dart';
@@ -25,7 +26,7 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
   final PageStorageBucket _bucket = PageStorageBucket();
 
   // Navigation items with Lucide icons (modern outline look)
-  // Tabs: Home, Prayers, Sermon Vault, Insights, Focus
+  // Tabs: Home, Prayers, Sermons, Focus, More
   static const List<_NavItem> _navItems = [
     _NavItem(
       icon: LucideIcons.home,
@@ -43,14 +44,14 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
       label: 'Sermons',
     ),
     _NavItem(
-      icon: LucideIcons.barChart2,
-      selectedIcon: LucideIcons.barChart2,
-      label: 'Insights',
-    ),
-    _NavItem(
       icon: LucideIcons.crosshair,
       selectedIcon: LucideIcons.crosshair,
       label: 'Focus',
+    ),
+    _NavItem(
+      icon: LucideIcons.menu,
+      selectedIcon: LucideIcons.menu,
+      label: 'More',
     ),
   ];
 
@@ -80,8 +81,8 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
             ),
             const PrayersPage(key: PageStorageKey('prayers')),
             const SermonVaultPage(key: PageStorageKey('sermons')),
-            const InsightsPage(key: PageStorageKey('insights')),
             const FocusPage(key: PageStorageKey('focus')),
+            const MorePage(key: PageStorageKey('more')),
           ],
         ),
       ),
@@ -91,16 +92,19 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
   }
 
   Widget? _buildFAB(BuildContext context) {
-    // Quick Pray FAB on Home tab
+    // Quick Pray FAB on Home tab - launches quick 1-minute focus timer
     if (_currentIndex == 0) {
       return FloatingActionButton.extended(
         heroTag: 'quick_pray',
         onPressed: () {
-          // Navigate to Focus page with 1-minute quick session
+          // Navigate to Focus timer with 1-minute quick session
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => const FocusPage(quickPrayMode: true),
+              builder: (_) => const FocusTimerPage(
+                durationMinutes: 1,
+                isQuickPray: true,
+              ),
             ),
           );
         },

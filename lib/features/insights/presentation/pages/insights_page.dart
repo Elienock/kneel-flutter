@@ -859,6 +859,12 @@ class _DayDetailsSheet extends StatelessWidget {
         return LucideIcons.wind;
       case SessionType.sermonPrep:
         return LucideIcons.fileText;
+      case SessionType.worship:
+        return LucideIcons.music;
+      case SessionType.journaling:
+        return LucideIcons.pencil;
+      case SessionType.specificPrayer:
+        return LucideIcons.heartHandshake;
     }
   }
 }

@@ -28,6 +28,10 @@ import 'core/services/mock/mock_backup_service.dart' as _i511;
 import 'core/services/mock/mock_connectivity_service.dart' as _i679;
 import 'core/services/mock/mock_notification_service.dart' as _i974;
 import 'features/auth/presentation/bloc/auth_cubit.dart' as _i538;
+import 'features/focus/data/repositories/supabase_focus_repository.dart'
+    as _i101;
+import 'features/focus/domain/repositories/i_focus_repository.dart' as _i515;
+import 'features/focus/presentation/bloc/focus_cubit.dart' as _i622;
 import 'features/insights/data/repositories/supabase_insights_repository.dart'
     as _i425;
 import 'features/insights/domain/repositories/i_insights_repository.dart'
@@ -50,6 +54,11 @@ import 'features/sermon/data/repositories/supabase_sermon_repository.dart'
     as _i264;
 import 'features/sermon/domain/repositories/i_sermon_repository.dart' as _i705;
 import 'features/sermon/presentation/bloc/sermon_cubit.dart' as _i269;
+import 'features/testimony/data/repositories/supabase_testimony_repository.dart'
+    as _i95;
+import 'features/testimony/domain/repositories/i_testimony_repository.dart'
+    as _i300;
+import 'features/testimony/presentation/bloc/testimony_cubit.dart' as _i848;
 
 extension GetItInjectableX on _i174.GetIt {
 // initializes the registration of main-scope dependencies inside of GetIt
@@ -81,19 +90,19 @@ extension GetItInjectableX on _i174.GetIt {
         () => _i425.SupabaseInsightsRepository());
     gh.lazySingleton<_i615.INotificationService>(
         () => _i974.MockNotificationService());
+    gh.lazySingleton<_i300.ITestimonyRepository>(
+        () => _i95.SupabaseTestimonyRepository());
     await gh.lazySingletonAsync<_i986.Box<_i797.SermonNoteModel>>(
       () => registerModule.sermonBox,
       instanceName: 'sermonBox',
       preResolve: true,
     );
-    gh.factory<_i541.SessionCubit>(() => _i541.SessionCubit(
-          gh<_i979.Box<_i739.PrayerSessionModel>>(),
-          gh<_i706.Uuid>(),
-        ));
     gh.lazySingleton<_i577.IConnectivityService>(
         () => _i679.MockConnectivityService());
     gh.lazySingleton<_i348.IPrayerRepository>(
         () => _i358.PrayerRepositoryImpl(gh<_i610.PrayerLocalDataSource>()));
+    gh.lazySingleton<_i515.IFocusRepository>(
+        () => _i101.SupabaseFocusRepository());
     gh.lazySingleton<_i546.InsightsCubit>(
         () => _i546.InsightsCubit(gh<_i701.IInsightsRepository>()));
     gh.lazySingleton<_i705.ISermonRepository>(
@@ -103,6 +112,11 @@ extension GetItInjectableX on _i174.GetIt {
         () => _i584.DeletePrayer(gh<_i348.IPrayerRepository>()));
     gh.lazySingleton<_i460.GetPrayers>(
         () => _i460.GetPrayers(gh<_i348.IPrayerRepository>()));
+    gh.factory<_i541.SessionCubit>(() => _i541.SessionCubit(
+          gh<_i979.Box<_i739.PrayerSessionModel>>(),
+          gh<_i706.Uuid>(),
+          gh<_i701.IInsightsRepository>(),
+        ));
     gh.lazySingleton<_i812.IAuthService>(() => _i92.FirebaseAuthService(
           gh<_i869.IBiometricService>(),
           gh<_i630.IProfileService>(),
@@ -111,11 +125,17 @@ extension GetItInjectableX on _i174.GetIt {
           gh<_i348.IPrayerRepository>(),
           gh<_i706.Uuid>(),
         ));
+    gh.factory<_i848.TestimonyCubit>(
+        () => _i848.TestimonyCubit(gh<_i300.ITestimonyRepository>()));
     gh.lazySingleton<_i269.SermonCubit>(
         () => _i269.SermonCubit(gh<_i705.ISermonRepository>()));
     gh.factory<_i817.ProfileCubit>(() => _i817.ProfileCubit(
           gh<_i630.IProfileService>(),
           gh<_i812.IAuthService>(),
+        ));
+    gh.factory<_i622.FocusCubit>(() => _i622.FocusCubit(
+          gh<_i515.IFocusRepository>(),
+          gh<_i701.IInsightsRepository>(),
         ));
     gh.factory<_i538.AuthCubit>(
         () => _i538.AuthCubit(gh<_i812.IAuthService>()));

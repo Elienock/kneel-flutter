@@ -13,18 +13,19 @@ import 'package:quick_church/features/prayer/presentation/widgets/prayer_detail_
 import 'package:quick_church/features/hall_of_faith/presentation/pages/hall_of_faith_page.dart';
 
 /// Prayer Time tab - distraction-free prayer mode with Sacred Timer.
-/// Renamed from Focus page. Now includes Active Prayers and Hall of Faith tabs.
-class FocusPage extends StatefulWidget {
+/// This is the prayer-specific focus page for praying through your prayer queue.
+/// For the general Focus tab with Bible Study, Meditation, etc., see focus feature.
+class PrayerTimePage extends StatefulWidget {
   /// If true, starts immediately with 1-minute quick pray session.
   final bool quickPrayMode;
 
-  const FocusPage({super.key, this.quickPrayMode = false});
+  const PrayerTimePage({super.key, this.quickPrayMode = false});
 
   @override
-  State<FocusPage> createState() => _FocusPageState();
+  State<PrayerTimePage> createState() => _PrayerTimePageState();
 }
 
-class _FocusPageState extends State<FocusPage> with SingleTickerProviderStateMixin {
+class _PrayerTimePageState extends State<PrayerTimePage> with SingleTickerProviderStateMixin {
   int _currentIndex = 0;
   final PageController _pageController = PageController();
   bool _isInFocusMode = false;

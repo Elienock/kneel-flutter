@@ -1,11 +1,15 @@
 import 'package:equatable/equatable.dart';
 
 /// Types of sessions that can be tracked.
+/// Unified across Prayer Sanctuary and Focus modes.
 enum SessionType {
   prayer('Prayer'),
   bibleStudy('Bible Study'),
   meditation('Meditation'),
-  sermonPrep('Sermon Prep');
+  sermonPrep('Sermon Prep'),
+  worship('Worship'),
+  journaling('Journaling'),
+  specificPrayer('Focused Prayer');
 
   final String label;
   const SessionType(this.label);
@@ -16,11 +20,42 @@ enum SessionType {
       case 'prayer':
         return SessionType.prayer;
       case 'bibleStudy':
+      case 'bible_study':
         return SessionType.bibleStudy;
       case 'meditation':
         return SessionType.meditation;
       case 'sermonPrep':
+      case 'sermon_prep':
         return SessionType.sermonPrep;
+      case 'worship':
+        return SessionType.worship;
+      case 'journaling':
+        return SessionType.journaling;
+      case 'specificPrayer':
+      case 'specific_prayer':
+      case 'generalPrayer':
+      case 'general_prayer':
+        return SessionType.prayer;
+      default:
+        return SessionType.prayer;
+    }
+  }
+
+  /// Convert from Focus feature FocusType.
+  static SessionType fromFocusType(String dbValue) {
+    switch (dbValue) {
+      case 'bible_study':
+        return SessionType.bibleStudy;
+      case 'meditation':
+        return SessionType.meditation;
+      case 'general_prayer':
+        return SessionType.prayer;
+      case 'specific_prayer':
+        return SessionType.specificPrayer;
+      case 'worship':
+        return SessionType.worship;
+      case 'journaling':
+        return SessionType.journaling;
       default:
         return SessionType.prayer;
     }

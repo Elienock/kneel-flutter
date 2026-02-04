@@ -26,6 +26,7 @@ import 'package:quick_church/features/sermon/presentation/bloc/sermon_cubit.dart
 import 'package:quick_church/features/insights/presentation/bloc/insights_cubit.dart';
 import 'package:quick_church/features/pulpit/presentation/bloc/pulpit_cubit.dart';
 import 'package:quick_church/features/community/presentation/bloc/community_cubit.dart';
+import 'package:quick_church/features/focus/presentation/bloc/focus_cubit.dart';
 import 'package:quick_church/injection.dart';
 
 void main() async {
@@ -132,35 +133,49 @@ class _KneelAppState extends State<KneelApp> {
         BlocProvider(
           create: (_) => CommunityCubit()..loadAll(),
         ),
+        BlocProvider(
+          create: (_) => getIt<FocusCubit>()..loadData(),
+        ),
       ],
-      child: BlocBuilder<LanguageCubit, Locale>(
-        builder: (context, locale) {
-          return MaterialApp(
-            title: 'Kneel',
-            debugShowCheckedModeBanner: false,
+      child: Builder(
+        builder: (context) {
+          // Wire up FocusCubit -> PrayerCubit callback for specific prayer completion
+          final focusCubit = context.read<FocusCubit>();
+          final prayerCubit = context.read<PrayerCubit>();
+          focusCubit.onPrayerCompleted = (prayerId) {
+            prayerCubit.incrementPrayerCount(prayerId);
+          };
 
-            // Localization configuration
-            locale: locale,
-            supportedLocales: LanguageCubit.supportedLocales,
-            localizationsDelegates: const [
-              GlobalMaterialLocalizations.delegate,
-              GlobalWidgetsLocalizations.delegate,
-              GlobalCupertinoLocalizations.delegate,
-            ],
+          return BlocBuilder<LanguageCubit, Locale>(
+            builder: (context, locale) {
+              return MaterialApp(
+                title: 'Kneel',
+                debugShowCheckedModeBanner: false,
 
-            // Theme configuration with Material 3
-            theme: AppTheme.lightTheme,
-            darkTheme: AppTheme.darkTheme,
-            themeMode: ThemeMode.system,
+                // Localization configuration
+                locale: locale,
+                supportedLocales: LanguageCubit.supportedLocales,
+                localizationsDelegates: const [
+                  GlobalMaterialLocalizations.delegate,
+                  GlobalWidgetsLocalizations.delegate,
+                  GlobalCupertinoLocalizations.delegate,
+                ],
 
-            // Auth-aware home
-            home: _showSplash
-                ? SplashPage(
-                    onInitComplete: () {
-                      setState(() => _showSplash = false);
-                    },
-                  )
-                : const _AuthGate(),
+                // Theme configuration with Material 3
+                theme: AppTheme.lightTheme,
+                darkTheme: AppTheme.darkTheme,
+                themeMode: ThemeMode.system,
+
+                // Auth-aware home
+                home: _showSplash
+                    ? SplashPage(
+                        onInitComplete: () {
+                          setState(() => _showSplash = false);
+                        },
+                      )
+                    : const _AuthGate(),
+              );
+            },
           );
         },
       ),

@@ -9,6 +9,7 @@ import 'package:quick_church/features/prayer/domain/entities/prayer.dart';
 import 'package:quick_church/features/prayer/presentation/bloc/prayer_cubit.dart';
 import 'package:quick_church/features/prayer/presentation/widgets/edit_prayer_bottom_sheet.dart';
 import 'package:quick_church/features/prayer/presentation/widgets/pin_dialog.dart';
+import 'package:quick_church/features/prayer/presentation/widgets/testimony_bottom_sheet.dart';
 import 'package:quick_church/features/sacred_time/sacred_time.dart';
 import 'package:quick_church/features/sermon/presentation/bloc/sermon_cubit.dart';
 import 'package:quick_church/features/community/presentation/bloc/community_cubit.dart';
@@ -688,8 +689,27 @@ class _PrayerDetailSheetState extends State<PrayerDetailSheet> {
     );
 
     if (confirmed == true && context.mounted) {
-      context.read<PrayerCubit>().markAsAnswered(widget.prayer.id);
-      Navigator.pop(context);
+      // Mark the prayer as answered
+      await context.read<PrayerCubit>().markAsAnswered(widget.prayer.id);
+
+      // Close the detail sheet first
+      if (context.mounted) {
+        Navigator.pop(context);
+      }
+
+      // Show testimony prompt after a brief delay for the animation
+      await Future.delayed(const Duration(milliseconds: 300));
+
+      if (context.mounted) {
+        // Get the updated prayer with answered status
+        final answeredPrayer = widget.prayer.copyWith(
+          status: PrayerStatus.answered,
+          answeredAt: DateTime.now(),
+        );
+
+        // Show testimony bottom sheet
+        await TestimonyBottomSheet.show(context, answeredPrayer);
+      }
     }
   }
 

@@ -199,12 +199,21 @@ class PrayerCubit extends Cubit<PrayerState> {
   }
 
   /// Updates the testimony for an answered prayer.
-  Future<void> updateTestimony(String id, String testimony) async {
+  /// Set [isPublic] to true to share the testimony with the community.
+  Future<void> updateTestimony(
+    String id,
+    String testimony, {
+    bool isPublic = false,
+  }) async {
     final currentPrayers = state is PrayerLoaded
         ? (state as PrayerLoaded).prayers
         : <Prayer>[];
 
-    final result = await _repository.updateTestimony(id, testimony);
+    final result = await _repository.updateTestimony(
+      id,
+      testimony,
+      isPublic: isPublic,
+    );
 
     if (result.failure != null) {
       emit(PrayerError(result.failure!.message));
@@ -220,7 +229,9 @@ class PrayerCubit extends Cubit<PrayerState> {
 
       emit(PrayerLoaded(
         updatedPrayers,
-        successMessage: 'Testimony saved',
+        successMessage: isPublic
+          ? 'Testimony shared with community!'
+          : 'Testimony saved',
       ));
     }
   }
