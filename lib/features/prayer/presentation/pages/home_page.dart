@@ -19,6 +19,16 @@ import 'package:quick_church/features/profile/presentation/pages/profile_page.da
 import 'package:quick_church/features/profile/presentation/widgets/email_verification_banner.dart';
 import 'package:quick_church/features/pulpit/presentation/bloc/pulpit_cubit.dart';
 import 'package:quick_church/features/pulpit/presentation/pages/pulpit_groups_page.dart';
+import 'package:quick_church/features/community/presentation/bloc/community_cubit.dart';
+import 'package:quick_church/features/community/presentation/bloc/community_state.dart';
+import 'package:quick_church/features/community/presentation/pages/friends_page.dart';
+import 'package:quick_church/features/community/presentation/pages/discover_groups_page.dart';
+import 'package:quick_church/features/community/presentation/pages/group_detail_page.dart';
+import 'package:quick_church/features/community/presentation/widgets/create_intention_sheet.dart';
+import 'package:quick_church/features/community/presentation/widgets/intention_detail_sheet.dart';
+import 'package:quick_church/features/community/domain/entities/friend_activity.dart';
+import 'package:quick_church/features/community/domain/entities/shared_intention.dart';
+import 'package:quick_church/features/community/domain/entities/prayer_group.dart';
 
 /// Home tab with YouVersion-style dual-view: Today and Community.
 class HomePage extends StatelessWidget {
@@ -265,78 +275,636 @@ class _TodayView extends StatelessWidget {
 }
 
 /// Community View - Friend activity feed and shared prayer intentions.
-class _CommunityView extends StatelessWidget {
+/// Now uses CommunityCubit for real data.
+class _CommunityView extends StatefulWidget {
   const _CommunityView();
+
+  @override
+  State<_CommunityView> createState() => _CommunityViewState();
+}
+
+class _CommunityViewState extends State<_CommunityView> {
+  @override
+  void initState() {
+    super.initState();
+    // Load community data when view is shown
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<CommunityCubit>().loadAll();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        // Friends Activity Header
-        const _SectionHeader(
-          title: 'Friend Activity',
-          icon: LucideIcons.activity,
-        ),
-        const SizedBox(height: 12),
+    return BlocBuilder<CommunityCubit, CommunityState>(
+      builder: (context, state) {
+        return RefreshIndicator(
+          onRefresh: () => context.read<CommunityCubit>().loadAll(),
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              // Header with Friends & Search buttons
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  // Friends button with badge
+                  Stack(
+                    children: [
+                      IconButton(
+                        icon: const Icon(LucideIcons.users),
+                        tooltip: 'Friends',
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => BlocProvider.value(
+                                value: context.read<CommunityCubit>(),
+                                child: const FriendsPage(),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                      if (state.friendRequests.isNotEmpty)
+                        Positioned(
+                          right: 8,
+                          top: 8,
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: const BoxDecoration(
+                              color: AppTheme.urgentColor,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Text(
+                              '${state.friendRequests.length}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  IconButton(
+                    icon: const Icon(LucideIcons.search),
+                    tooltip: 'Discover Groups',
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => BlocProvider.value(
+                            value: context.read<CommunityCubit>(),
+                            child: const DiscoverGroupsPage(),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
 
-        // Activity Feed
-        ..._mockFriendActivities.map((activity) => _FriendActivityCard(
-              activity: activity,
-              isDark: isDark,
-            )),
+              // Friends Activity Header
+              const _SectionHeader(
+                title: 'Friend Activity',
+                icon: LucideIcons.activity,
+              ),
+              const SizedBox(height: 12),
 
-        const SizedBox(height: 24),
-
-        // Shared Intentions Section
-        _SectionHeader(
-          title: 'Shared Intentions',
-          icon: LucideIcons.heart,
-          actionLabel: 'See all',
-          onAction: () {},
-        ),
-        const SizedBox(height: 12),
-
-        ..._mockSharedIntentions.map((intention) => _SharedIntentionCard(
-              intention: intention,
-              isDark: isDark,
-            )),
-
-        const SizedBox(height: 24),
-
-        // Prayer Groups Section
-        _SectionHeader(
-          title: 'Your Groups',
-          icon: LucideIcons.users,
-          actionLabel: 'Join more',
-          onAction: () {},
-        ),
-        const SizedBox(height: 12),
-
-        SizedBox(
-          height: 120,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            itemCount: _mockPrayerGroups.length,
-            itemBuilder: (context, index) {
-              return Padding(
-                padding: EdgeInsets.only(
-                  right: index < _mockPrayerGroups.length - 1 ? 12 : 0,
-                ),
-                child: _PrayerGroupCard(
-                  group: _mockPrayerGroups[index],
+              // Activity Feed from Cubit
+              if (state.activities.isEmpty)
+                _EmptyStateCard(
+                  icon: LucideIcons.activity,
+                  message: 'No activity yet. Connect with friends!',
                   isDark: isDark,
-                ),
-              );
-            },
-          ),
-        ),
+                )
+              else
+                ...state.activities.take(4).map((activity) => _ActivityCard(
+                      activity: activity,
+                      isDark: isDark,
+                    )),
 
-        const SizedBox(height: 100),
-      ],
+              const SizedBox(height: 24),
+
+              // Shared Intentions Section
+              _SectionHeader(
+                title: 'Shared Intentions',
+                icon: LucideIcons.heart,
+                actionLabel: 'Share',
+                onAction: () {
+                  CreateIntentionSheet.show(context, context.read<CommunityCubit>());
+                },
+              ),
+              const SizedBox(height: 12),
+
+              if (state.intentions.isEmpty)
+                _EmptyStateCard(
+                  icon: LucideIcons.heart,
+                  message: 'No prayer requests yet. Be the first to share!',
+                  isDark: isDark,
+                )
+              else
+                ...state.intentions.take(3).map((intention) => _IntentionCard(
+                      intention: intention,
+                      isDark: isDark,
+                    )),
+
+              const SizedBox(height: 24),
+
+              // Prayer Groups Section
+              _SectionHeader(
+                title: 'Your Groups',
+                icon: LucideIcons.users,
+                actionLabel: 'Discover',
+                onAction: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => BlocProvider.value(
+                        value: context.read<CommunityCubit>(),
+                        child: const DiscoverGroupsPage(),
+                      ),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 12),
+
+              if (state.myGroups.isEmpty)
+                _EmptyStateCard(
+                  icon: LucideIcons.users,
+                  message: 'Join a prayer group to connect with others.',
+                  isDark: isDark,
+                )
+              else
+                SizedBox(
+                  height: 120,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: state.myGroups.length,
+                    itemBuilder: (context, index) {
+                      return Padding(
+                        padding: EdgeInsets.only(
+                          right: index < state.myGroups.length - 1 ? 12 : 0,
+                        ),
+                        child: _GroupCard(
+                          group: state.myGroups[index],
+                          isDark: isDark,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+
+              const SizedBox(height: 100),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Empty state card for community sections.
+class _EmptyStateCard extends StatelessWidget {
+  final IconData icon;
+  final String message;
+  final bool isDark;
+
+  const _EmptyStateCard({
+    required this.icon,
+    required this.message,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: isDark ? AppTheme.darkSurface : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.grey.withAlpha(50),
+        ),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, size: 32, color: Colors.grey),
+          const SizedBox(height: 8),
+          Text(
+            message,
+            style: GoogleFonts.inter(
+              fontSize: 14,
+              color: Colors.grey,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Activity card using real FriendActivity data.
+class _ActivityCard extends StatelessWidget {
+  final FriendActivity activity;
+  final bool isDark;
+
+  const _ActivityCard({
+    required this.activity,
+    required this.isDark,
+  });
+
+  (IconData, Color) _getActivityIcon() {
+    switch (activity.type) {
+      case ActivityType.startedPraying:
+        return (LucideIcons.heart, AppTheme.primaryColor);
+      case ActivityType.sharedIntention:
+        return (LucideIcons.messageCircle, AppTheme.secondaryColor);
+      case ActivityType.joinedGroup:
+        return (LucideIcons.users, AppTheme.mediumColor);
+      case ActivityType.answeredPrayer:
+        return (LucideIcons.sparkles, AppTheme.answeredColor);
+      case ActivityType.prayerStreak:
+        return (LucideIcons.flame, AppTheme.goldenPromise);
+      case ActivityType.newFriend:
+        return (LucideIcons.userPlus, AppTheme.primaryColor);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final (icon, color) = _getActivityIcon();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? AppTheme.darkSurface : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(isDark ? 51 : 13),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Avatar
+          Stack(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: color.withAlpha(51),
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: Text(
+                    activity.friend.initials,
+                    style: GoogleFonts.outfit(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: color,
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                right: -2,
+                bottom: -2,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: color,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: isDark ? AppTheme.darkSurface : Colors.white,
+                      width: 2,
+                    ),
+                  ),
+                  child: Icon(icon, size: 10, color: Colors.white),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                RichText(
+                  text: TextSpan(
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      color: isDark ? Colors.white : Colors.black87,
+                    ),
+                    children: [
+                      TextSpan(
+                        text: activity.friend.name,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      TextSpan(text: ' ${activity.description}'),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  activity.timeAgo,
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    color: isDark ? Colors.white38 : Colors.black38,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Intention card using real SharedIntention data.
+class _IntentionCard extends StatelessWidget {
+  final SharedIntention intention;
+  final bool isDark;
+
+  const _IntentionCard({
+    required this.intention,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isAnswered = intention.status == IntentionStatus.answered;
+
+    return GestureDetector(
+      onTap: () => IntentionDetailSheet.show(context, intention),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isDark ? AppTheme.darkSurface : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isAnswered
+                ? AppTheme.answeredColor.withAlpha(100)
+                : AppTheme.primaryColor.withAlpha(51),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withAlpha(isDark ? 51 : 13),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryColor.withAlpha(38),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: Text(
+                      intention.author.initials,
+                      style: GoogleFonts.outfit(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.primaryColor,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    intention.author.name,
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white : Colors.black87,
+                    ),
+                  ),
+                ),
+                if (isAnswered)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppTheme.answeredColor.withAlpha(25),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(LucideIcons.sparkles, size: 12, color: AppTheme.answeredColor),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Answered',
+                          style: GoogleFonts.inter(
+                            fontSize: 10,
+                            color: AppTheme.answeredColor,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  Text(
+                    intention.timeAgo,
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      color: isDark ? Colors.white38 : Colors.black38,
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              intention.content,
+              style: GoogleFonts.inter(
+                fontSize: 14,
+                color: isDark ? Colors.white70 : Colors.black87,
+                height: 1.5,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Icon(
+                  intention.hasPrayed ? LucideIcons.heartHandshake : LucideIcons.heart,
+                  size: 14,
+                  color: intention.hasPrayed ? AppTheme.primaryColor : (isDark ? Colors.white38 : Colors.black38),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '${intention.prayerCount} praying',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    color: intention.hasPrayed ? AppTheme.primaryColor : (isDark ? Colors.white38 : Colors.black38),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Icon(
+                  LucideIcons.messageCircle,
+                  size: 14,
+                  color: isDark ? Colors.white38 : Colors.black38,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '${intention.commentCount}',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    color: isDark ? Colors.white38 : Colors.black38,
+                  ),
+                ),
+                const Spacer(),
+                if (!intention.hasPrayed && !isAnswered)
+                  TextButton.icon(
+                    onPressed: () {
+                      HapticFeedback.mediumImpact();
+                      context.read<CommunityCubit>().prayForIntention(intention.id);
+                    },
+                    icon: const Icon(LucideIcons.heart, size: 14),
+                    label: const Text('Pray'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppTheme.primaryColor,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Group card using real PrayerGroup data.
+class _GroupCard extends StatelessWidget {
+  final PrayerGroup group;
+  final bool isDark;
+
+  const _GroupCard({
+    required this.group,
+    required this.isDark,
+  });
+
+  Color get _categoryColor {
+    switch (group.category?.toLowerCase()) {
+      case 'family':
+        return const Color(0xFF673AB7);
+      case 'youth':
+        return const Color(0xFF30D158);
+      case 'healing':
+        return const Color(0xFFFF9500);
+      case 'career':
+        return const Color(0xFF007AFF);
+      case 'marriage':
+        return const Color(0xFFFF2D55);
+      case 'daily prayer':
+        return const Color(0xFF5856D6);
+      default:
+        return AppTheme.primaryColor;
+    }
+  }
+
+  IconData get _categoryIcon {
+    switch (group.category?.toLowerCase()) {
+      case 'family':
+        return LucideIcons.home;
+      case 'youth':
+        return LucideIcons.sparkles;
+      case 'healing':
+        return LucideIcons.heartHandshake;
+      case 'career':
+        return LucideIcons.briefcase;
+      case 'marriage':
+        return LucideIcons.heart;
+      case 'daily prayer':
+        return LucideIcons.sunrise;
+      default:
+        return LucideIcons.users;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => BlocProvider.value(
+              value: context.read<CommunityCubit>(),
+              child: GroupDetailPage(group: group),
+            ),
+          ),
+        );
+      },
+      child: Container(
+        width: 160,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              _categoryColor,
+              _categoryColor.withAlpha(179),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              _categoryIcon,
+              color: Colors.white,
+              size: 24,
+            ),
+            const Spacer(),
+            Text(
+              group.name,
+              style: GoogleFonts.outfit(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${group.memberCount} members',
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                color: Colors.white70,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -393,420 +961,6 @@ class _SectionHeader extends StatelessWidget {
     );
   }
 }
-
-/// Friend activity card widget.
-class _FriendActivityCard extends StatelessWidget {
-  final _FriendActivity activity;
-  final bool isDark;
-
-  const _FriendActivityCard({
-    required this.activity,
-    required this.isDark,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDark ? AppTheme.darkSurface : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Avatar
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: activity.avatarColor.withValues(alpha: 0.2),
-              shape: BoxShape.circle,
-            ),
-            child: Center(
-              child: Text(
-                activity.name[0],
-                style: GoogleFonts.outfit(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: activity.avatarColor,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                RichText(
-                  text: TextSpan(
-                    style: GoogleFonts.inter(
-                      fontSize: 14,
-                      color: isDark ? Colors.white : Colors.black87,
-                    ),
-                    children: [
-                      TextSpan(
-                        text: activity.name,
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      TextSpan(text: ' ${activity.action}'),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  activity.timeAgo,
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
-                    color: isDark ? Colors.white38 : Colors.black38,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Icon(
-            activity.icon,
-            size: 20,
-            color: AppTheme.primaryColor,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Shared intention card widget.
-class _SharedIntentionCard extends StatelessWidget {
-  final _SharedIntention intention;
-  final bool isDark;
-
-  const _SharedIntentionCard({
-    required this.intention,
-    required this.isDark,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDark ? AppTheme.darkSurface : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: AppTheme.primaryColor.withValues(alpha: 0.2),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: AppTheme.primaryColor.withValues(alpha: 0.15),
-                  shape: BoxShape.circle,
-                ),
-                child: Center(
-                  child: Text(
-                    intention.author[0],
-                    style: GoogleFonts.outfit(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: AppTheme.primaryColor,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  intention.author,
-                  style: GoogleFonts.inter(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: isDark ? Colors.white : Colors.black87,
-                  ),
-                ),
-              ),
-              Text(
-                intention.timeAgo,
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  color: isDark ? Colors.white38 : Colors.black38,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            intention.content,
-            style: GoogleFonts.inter(
-              fontSize: 14,
-              color: isDark ? Colors.white70 : Colors.black87,
-              height: 1.5,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              _IntentionStat(
-                icon: LucideIcons.heart,
-                count: intention.prayerCount,
-                label: 'praying',
-                isDark: isDark,
-              ),
-              const SizedBox(width: 16),
-              _IntentionStat(
-                icon: LucideIcons.messageCircle,
-                count: intention.commentCount,
-                label: 'comments',
-                isDark: isDark,
-              ),
-              const Spacer(),
-              TextButton.icon(
-                onPressed: () {},
-                icon: const Icon(LucideIcons.handMetal, size: 16),
-                label: const Text('Pray'),
-                style: TextButton.styleFrom(
-                  foregroundColor: AppTheme.primaryColor,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Intention stat widget.
-class _IntentionStat extends StatelessWidget {
-  final IconData icon;
-  final int count;
-  final String label;
-  final bool isDark;
-
-  const _IntentionStat({
-    required this.icon,
-    required this.count,
-    required this.label,
-    required this.isDark,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(
-          icon,
-          size: 14,
-          color: isDark ? Colors.white38 : Colors.black38,
-        ),
-        const SizedBox(width: 4),
-        Text(
-          '$count $label',
-          style: GoogleFonts.inter(
-            fontSize: 12,
-            color: isDark ? Colors.white38 : Colors.black38,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// Prayer group card widget.
-class _PrayerGroupCard extends StatelessWidget {
-  final _PrayerGroup group;
-  final bool isDark;
-
-  const _PrayerGroupCard({
-    required this.group,
-    required this.isDark,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 160,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            group.color,
-            group.color.withValues(alpha: 0.7),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            group.icon,
-            color: Colors.white,
-            size: 24,
-          ),
-          const Spacer(),
-          Text(
-            group.name,
-            style: GoogleFonts.outfit(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '${group.memberCount} members',
-            style: GoogleFonts.inter(
-              fontSize: 12,
-              color: Colors.white70,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ============================================================================
-// Mock Data Models
-// ============================================================================
-
-class _FriendActivity {
-  final String name;
-  final String action;
-  final String timeAgo;
-  final Color avatarColor;
-  final IconData icon;
-
-  const _FriendActivity({
-    required this.name,
-    required this.action,
-    required this.timeAgo,
-    required this.avatarColor,
-    required this.icon,
-  });
-}
-
-class _SharedIntention {
-  final String author;
-  final String content;
-  final String timeAgo;
-  final int prayerCount;
-  final int commentCount;
-
-  const _SharedIntention({
-    required this.author,
-    required this.content,
-    required this.timeAgo,
-    required this.prayerCount,
-    required this.commentCount,
-  });
-}
-
-class _PrayerGroup {
-  final String name;
-  final int memberCount;
-  final Color color;
-  final IconData icon;
-
-  const _PrayerGroup({
-    required this.name,
-    required this.memberCount,
-    required this.color,
-    required this.icon,
-  });
-}
-
-// Mock data
-const _mockFriendActivities = [
-  _FriendActivity(
-    name: 'Sarah M.',
-    action: 'completed a 7-day prayer streak',
-    timeAgo: '2h ago',
-    avatarColor: Color(0xFF30D158),
-    icon: LucideIcons.flame,
-  ),
-  _FriendActivity(
-    name: 'David K.',
-    action: 'started praying for your intention',
-    timeAgo: '4h ago',
-    avatarColor: Color(0xFF5856D6),
-    icon: LucideIcons.heart,
-  ),
-  _FriendActivity(
-    name: 'Emma R.',
-    action: 'shared a prayer request',
-    timeAgo: '6h ago',
-    avatarColor: Color(0xFFFF9500),
-    icon: LucideIcons.share2,
-  ),
-];
-
-const _mockSharedIntentions = [
-  _SharedIntention(
-    author: 'Michael T.',
-    content: 'Please pray for my grandmother who is in the hospital. She has been fighting pneumonia for two weeks.',
-    timeAgo: '1h ago',
-    prayerCount: 24,
-    commentCount: 5,
-  ),
-  _SharedIntention(
-    author: 'Grace L.',
-    content: 'Praying for wisdom as I start my new job next week. Would appreciate your prayers!',
-    timeAgo: '3h ago',
-    prayerCount: 18,
-    commentCount: 3,
-  ),
-];
-
-const _mockPrayerGroups = [
-  _PrayerGroup(
-    name: 'Morning Devotion',
-    memberCount: 156,
-    color: Color(0xFF673AB7),
-    icon: LucideIcons.sunrise,
-  ),
-  _PrayerGroup(
-    name: 'Youth Ministry',
-    memberCount: 89,
-    color: Color(0xFF30D158),
-    icon: LucideIcons.users,
-  ),
-  _PrayerGroup(
-    name: 'Healing Circle',
-    memberCount: 234,
-    color: Color(0xFFFF9500),
-    icon: LucideIcons.heart,
-  ),
-];
 
 // ============================================================================
 // Original Today View Components (Preserved)

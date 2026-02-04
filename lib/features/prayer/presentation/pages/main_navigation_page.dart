@@ -9,7 +9,6 @@ import 'package:quick_church/features/prayer/presentation/pages/prayers_page.dar
 import 'package:quick_church/features/prayer/presentation/widgets/add_prayer_bottom_sheet.dart';
 import 'package:quick_church/features/sermon/presentation/pages/sermon_vault_page.dart';
 import 'package:quick_church/features/sermon/presentation/pages/sermon_editor_page.dart';
-import 'package:quick_church/features/community/presentation/pages/community_page.dart';
 
 /// Main navigation shell with YouVersion-style bottom navigation.
 class MainNavigationPage extends StatefulWidget {
@@ -26,7 +25,7 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
   final PageStorageBucket _bucket = PageStorageBucket();
 
   // Navigation items with Lucide icons (modern outline look)
-  // Tabs: Home, Prayers, Community, Sermons, Insights
+  // Tabs: Home, Prayers, Sermon Vault, Insights, Focus
   static const List<_NavItem> _navItems = [
     _NavItem(
       icon: LucideIcons.home,
@@ -39,11 +38,6 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
       label: 'Prayers',
     ),
     _NavItem(
-      icon: LucideIcons.users,
-      selectedIcon: LucideIcons.users,
-      label: 'Community',
-    ),
-    _NavItem(
       icon: LucideIcons.bookOpen,
       selectedIcon: LucideIcons.bookOpen,
       label: 'Sermons',
@@ -52,6 +46,11 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
       icon: LucideIcons.barChart2,
       selectedIcon: LucideIcons.barChart2,
       label: 'Insights',
+    ),
+    _NavItem(
+      icon: LucideIcons.crosshair,
+      selectedIcon: LucideIcons.crosshair,
+      label: 'Focus',
     ),
   ];
 
@@ -80,9 +79,9 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
               onNavigateToPrayers: () => setState(() => _currentIndex = 1),
             ),
             const PrayersPage(key: PageStorageKey('prayers')),
-            const CommunityPage(key: PageStorageKey('community')),
             const SermonVaultPage(key: PageStorageKey('sermons')),
             const InsightsPage(key: PageStorageKey('insights')),
+            const FocusPage(key: PageStorageKey('focus')),
           ],
         ),
       ),
@@ -121,7 +120,7 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
     }
 
     // Add Sermon Note FAB on Sermon Vault tab
-    if (_currentIndex == 3) {
+    if (_currentIndex == 2) {
       return FloatingActionButton.extended(
         heroTag: 'add_sermon',
         onPressed: () {
