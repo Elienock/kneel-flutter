@@ -11,8 +11,7 @@ import 'package:quick_church/features/prayer/presentation/widgets/edit_prayer_bo
 import 'package:quick_church/features/prayer/presentation/widgets/pin_dialog.dart';
 import 'package:quick_church/features/sacred_time/sacred_time.dart';
 import 'package:quick_church/features/sermon/presentation/bloc/sermon_cubit.dart';
-import 'package:quick_church/features/pulpit/presentation/bloc/pulpit_cubit.dart';
-import 'package:quick_church/features/pulpit/presentation/pages/pulpit_groups_page.dart';
+import 'package:quick_church/features/community/presentation/bloc/community_cubit.dart';
 
 /// Bottom sheet showing full prayer details with actions.
 class PrayerDetailSheet extends StatefulWidget {
@@ -26,11 +25,11 @@ class PrayerDetailSheet extends StatefulWidget {
   });
 
   static Future<void> show(BuildContext context, Prayer prayer, {bool isUnlocked = false}) async {
-    // Capture ALL cubits needed for Sacred Time and Pulpit Mode integration
+    // Capture ALL cubits needed for Sacred Time and Community integration
     final prayerCubit = context.read<PrayerCubit>();
     final sermonCubit = context.read<SermonCubit>();
     final insightsCubit = context.read<InsightsCubit>();
-    final pulpitCubit = context.read<PulpitCubit>();
+    final communityCubit = context.read<CommunityCubit>();
 
     // Check if prayer is locked and needs PIN
     if (prayer.isLocked && !isUnlocked) {
@@ -54,7 +53,7 @@ class PrayerDetailSheet extends StatefulWidget {
           BlocProvider.value(value: prayerCubit),
           BlocProvider.value(value: sermonCubit),
           BlocProvider.value(value: insightsCubit),
-          BlocProvider.value(value: pulpitCubit),
+          BlocProvider.value(value: communityCubit),
         ],
         child: PrayerDetailSheet(prayer: prayer, isUnlocked: true),
       ),
@@ -114,22 +113,11 @@ class _PrayerDetailSheetState extends State<PrayerDetailSheet> {
                   tooltip: 'Log Past Prayer',
                   onPressed: () => _showLogManualPrayerDialog(context),
                 ),
-                // Pulpit Mode button
+                // Share to Community button
                 IconButton(
-                  icon: const Icon(LucideIcons.mic2),
-                  tooltip: 'Pulpit Mode',
-                  onPressed: () {
-                    Navigator.pop(context);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (ctx) => BlocProvider.value(
-                          value: context.read<PulpitCubit>(),
-                          child: const PulpitGroupsPage(),
-                        ),
-                      ),
-                    );
-                  },
+                  icon: const Icon(LucideIcons.users),
+                  tooltip: 'Share to Community',
+                  onPressed: () => _showShareToCommunityDialog(context),
                 ),
                 // Share button
                 IconButton(
@@ -702,6 +690,103 @@ class _PrayerDetailSheetState extends State<PrayerDetailSheet> {
     if (confirmed == true && context.mounted) {
       context.read<PrayerCubit>().markAsAnswered(widget.prayer.id);
       Navigator.pop(context);
+    }
+  }
+
+  /// Shows dialog to share prayer to community as a shared intention.
+  Future<void> _showShareToCommunityDialog(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(LucideIcons.users, color: AppTheme.secondaryColor, size: 24),
+            const SizedBox(width: 12),
+            const Text('Share to Community'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Share this prayer request with your community?',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppTheme.secondaryColor.withAlpha(20),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    widget.prayer.title,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    widget.prayer.description,
+                    style: Theme.of(context).textTheme.bodySmall,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                const Icon(LucideIcons.info, size: 14, color: Colors.grey),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Your friends will be able to pray for this intention',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Colors.grey,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(ctx, true),
+            icon: const Icon(LucideIcons.send, size: 18),
+            label: const Text('Share'),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppTheme.secondaryColor,
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && context.mounted) {
+      // Create the shared intention
+      final content = '${widget.prayer.title}\n\n${widget.prayer.description}';
+      await context.read<CommunityCubit>().createIntention(content);
+
+      if (context.mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Prayer shared with your community!'),
+            backgroundColor: AppTheme.secondaryColor,
+          ),
+        );
+      }
     }
   }
 
