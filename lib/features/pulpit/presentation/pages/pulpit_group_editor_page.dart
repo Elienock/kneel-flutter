@@ -383,26 +383,48 @@ class _PulpitGroupEditorPageState extends State<PulpitGroupEditorPage> {
 
     setState(() => _isSaving = true);
 
-    final group = await context.read<PulpitCubit>().createGroup(
-          title: title,
-          description: _descriptionController.text.trim().isEmpty
-              ? null
-              : _descriptionController.text.trim(),
-          autoAdvance: _autoAdvance,
-          secondsPerPoint: _autoAdvance ? _secondsPerPoint : 0,
-        );
+    try {
+      final group = await context.read<PulpitCubit>().createGroup(
+            title: title,
+            description: _descriptionController.text.trim().isEmpty
+                ? null
+                : _descriptionController.text.trim(),
+            autoAdvance: _autoAdvance,
+            secondsPerPoint: _autoAdvance ? _secondsPerPoint : 0,
+          );
 
-    setState(() => _isSaving = false);
+      if (!mounted) return;
+      setState(() => _isSaving = false);
 
-    if (group != null && mounted) {
-      // Navigate to edit mode with the new group
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (ctx) => BlocProvider.value(
-            value: context.read<PulpitCubit>(),
-            child: PulpitGroupEditorPage(groupId: group.id),
+      if (group != null) {
+        // Navigate to edit mode with the new group
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (ctx) => BlocProvider.value(
+              value: context.read<PulpitCubit>(),
+              child: PulpitGroupEditorPage(groupId: group.id),
+            ),
           ),
+        );
+      } else {
+        // Show error if group creation failed
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to create group. Please try again.'),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: AppTheme.urgentColor,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isSaving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: $e'),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: AppTheme.urgentColor,
         ),
       );
     }

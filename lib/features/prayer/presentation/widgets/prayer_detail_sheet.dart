@@ -11,6 +11,8 @@ import 'package:quick_church/features/prayer/presentation/widgets/edit_prayer_bo
 import 'package:quick_church/features/prayer/presentation/widgets/pin_dialog.dart';
 import 'package:quick_church/features/sacred_time/sacred_time.dart';
 import 'package:quick_church/features/sermon/presentation/bloc/sermon_cubit.dart';
+import 'package:quick_church/features/pulpit/presentation/bloc/pulpit_cubit.dart';
+import 'package:quick_church/features/pulpit/presentation/pages/pulpit_groups_page.dart';
 
 /// Bottom sheet showing full prayer details with actions.
 class PrayerDetailSheet extends StatefulWidget {
@@ -24,10 +26,11 @@ class PrayerDetailSheet extends StatefulWidget {
   });
 
   static Future<void> show(BuildContext context, Prayer prayer, {bool isUnlocked = false}) async {
-    // Capture ALL cubits needed for Sacred Time integration
+    // Capture ALL cubits needed for Sacred Time and Pulpit Mode integration
     final prayerCubit = context.read<PrayerCubit>();
     final sermonCubit = context.read<SermonCubit>();
     final insightsCubit = context.read<InsightsCubit>();
+    final pulpitCubit = context.read<PulpitCubit>();
 
     // Check if prayer is locked and needs PIN
     if (prayer.isLocked && !isUnlocked) {
@@ -51,6 +54,7 @@ class PrayerDetailSheet extends StatefulWidget {
           BlocProvider.value(value: prayerCubit),
           BlocProvider.value(value: sermonCubit),
           BlocProvider.value(value: insightsCubit),
+          BlocProvider.value(value: pulpitCubit),
         ],
         child: PrayerDetailSheet(prayer: prayer, isUnlocked: true),
       ),
@@ -109,6 +113,23 @@ class _PrayerDetailSheetState extends State<PrayerDetailSheet> {
                   icon: const Icon(LucideIcons.history),
                   tooltip: 'Log Past Prayer',
                   onPressed: () => _showLogManualPrayerDialog(context),
+                ),
+                // Pulpit Mode button
+                IconButton(
+                  icon: const Icon(LucideIcons.mic2),
+                  tooltip: 'Pulpit Mode',
+                  onPressed: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (ctx) => BlocProvider.value(
+                          value: context.read<PulpitCubit>(),
+                          child: const PulpitGroupsPage(),
+                        ),
+                      ),
+                    );
+                  },
                 ),
                 // Share button
                 IconButton(
